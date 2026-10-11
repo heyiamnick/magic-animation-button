@@ -1,0 +1,2148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ISOLINE — Thread → Signal → Terrain → System</title>
+<style>html,body{margin:0;height:100%;background:#0A0A0B;overflow:hidden}canvas{display:block;position:absolute;left:0;top:0}</style>
+</head>
+<body>
+<canvas id="film"></canvas>
+<script>
+window.FONT_DATA={display:"d09GRk9UVE8AAB98AAwAAAAAQQAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAABDRkYgAAAEVAAAFVcAACoJcQjyVUdERUYAABmsAAAALgAAADQA3QDuR1BPUwAAGdwAAAOgAAAM9iLVEZ9HU1VCAAAdfAAAAPEAAAFIIi/OxE9TLzIAAAF8AAAAVAAAAGBygBniY21hcAAAA6AAAACeAAAAyGwUSIRoZWFkAAABHAAAADYAAAA2L9NygGhoZWEAAAFUAAAAIAAAACQQCwbKaG10eAAAHnAAAAEMAAABvhV2IkVtYXhwAAABdAAAAAYAAAAGAHBQAG5hbWUAAAHQAAAB0AAABEhulZq4cG9zdAAABEAAAAATAAAAIP+rAQQAAQAAAAQAAF3mUr1fDzz1AAMIAAAAAADhgFONAAAAAObw1ML//P6uCEwGiwAAAAMAAgAAAAAAAHicY2BkYGA/8E+IgYHD5/+f/384fBiAIiggHwCgVwbnAABQAABwAAB4nGNgYfVnbmFgZWBgNWY5y8DAMAtCM51lZGGqAtIMXMwMIIqlgYEBxEpggIKgYN9ghgMMCkpC7Af+CTEwsB9gfAcUZgTJsSiwXgJSCgwcAF74DON4nJ1TSy8DURT+rqn3I0R0YXUXYqWltBKaSIqIJpWi2NOOtvQhM1Nib2Hpp/gp1n6ClZ/gu2duOlOJpJHJ6f3O8zvn3FsAi/iCA5WYBHBKCbHCKrUQj2AOjxY7uMKLxYlYzCi28WnxGFbUvMXjuFBZiycwoV4tnoRWbxZPE79bPBPDs0qrD4vnkB35tngey86KxQuYcvYsXorZk5FdAUnnGAfo4gHP8NBEHQ0E0NjEBjLsXOOCFpdnER16XEZpzuYx545aVaIL6PFs0ObBH4g8ZE2f1Vu4JoPGvqAq7nHOiDrzjO4hizQZzZentcn8FO059pHBFiWHHUqeWRWcUPIxlkGOVIzjSvw+/V1G6yFZhqkcn/GSmqa9g9qvPZls49G0eDxrtLdl3nvaurjlr+mvTUn30TkjDOpJdkHqhnP4Moe5oYBd+djFOr+oQptx63JjIfORxJsbqghbgCdhd/u9tXhWqXeoudJ/r8+n5U5dyS6ixLNMVlc2GVUuDVRYo+X31jPszIiOdTbIG23qkdKULd/w13ie5J4ado9H3MeZ4IDT6/4uwk34rGle8QNtZh++1ErLu6zTX2Z+6V85f7/p6E1E26nJP8n07f8ATiOjtHicVY7PCgFxFIU/wxMwK1n8jIwmiuyGJFmJwkpDytqfJ7FR8xC2Fmq23sJOs/cQ150fG6fuOXfxde4FHCCv46rnbBa4a3oY3Rz1GnUC2oT0GbDmRsLTuKZbjb2iiLJfpkGTDj1lRj+mpMzFMhNajJVE3lm3PCSRq5zTYerDa24vZ6poF/j8q2x9xZQZOyKW+sWCDVv2HDlw+gA31SIvAAB4nGNgZgCD/ysYWRiwAAAn5wGwAHic1VkLXFVVut+bw4Jl4kk5HlQ8Ij7zHSqZllqaQz7JB5pmooCQKC85CPaY8qYouHxNmdmkjUOmjVpOYkikoympmZNoZj7LMS+a+avGyG/t823ofmufw0Ps3spp+s394Tlrrb3W93781z7qmr+fpuu6Y1haVmLmkGR3Rkrc490Hp8QlzFKPB8ixmhyny5ggTY73kxNsvYNssDrIP2zos0uWC+EbggIXYbmLj3QFCOZpevtmV+cvgz3JTbT+xFrjWhOthdZW66zdqd2lDdCGaCO0MdokLU6boWVqT2v52gvaWm2D9qb2rnZA+1g7r/1Tt+lBeqjeVu+s99T768P08Xq8nqk/oefpL+oF+ht6sb5LP6Af1U/rF/V/6h4/f7+Gfk392vr19Iv0i/Vb6PeS34asGZmJiT16JqXPyezhdkf0dCfPtca05LREa/JEYmZ6j6ykdFpmJWXlqLmXJivJIqIhOVutFCV9J2YnptGYmPzYjCwaLT7VJD1riWqE+aa+c9Y8IT01NY4WGYmZyenTaZKQnpKeVjMmxLkteYmpydUbGXGZiWkpiUlZ1fNMn/jaDR9VnV3fkxmPZ8ywVPZNfI8TZ8+JS1EEKXPcNKQmp3nHOSlZyRkpj9ecqOarjvnm3rPVi2qCarUz4hISb9Ksnlp1VElMmx7nnuGdptZMMzKTUxNr3VGrSo0etUrcoEFcZmZ6jhJrTSyJ1mxOhjVMT89JqzlSS1CrWWSPCKsEwscPC49Lmx7uXSS7w+PCszLjpiemxmXOCk9PCs90p7p7PJCe8bhFGt4romef8JgZib7zozPTZyYmZIUPmpM1Iz3T7X3oq6pwq6pueKRRfbRtoTVpoC/qoDXQKbM1f01rrGl2TUvXqDT0rX5UJvo2TWukabdrWktNL9Q0l0aVo4VpWpBGhaO9runbbdqfNS1A8dOLmZahCs+mjdcu6RP0rfo1vy5+RX5oc9nSbDtsn/nH+u9iEWxpQLeAVYH3B7oDD/FGfBn/pkFkg6caXLnNdZtoOKbhq0ERQWcbBTU6an/y9oa3x97+eeP4xmVNmjSZFxwV/KKjvaPM8UPTUmeasypkdMjRZjHNZjfb0tzRPKv531qwFiNaPNfiZIvvQ4NDHwh9JnRt6MWWzpZjW2a03NGypOUPrt+5FrvKWiW1WtTqtVZ7W30RpoeFhd0XNiXs92F/DPukdf/Wa1tfCneFjwrPD98Y/k2b8DZT2jzZZl/bTu0i293dTrT7vH1k+8Xtz3WIKLHDunXZkA/HPT1zdOEKaGUTwiknC3Yc8plcKNgxpHGGYOZSFzvGzFLBoHFVT+fy1ew9GLoLBu+EYfxdHLYTB+/GoXz508z+hoDDUEJ/m+Bw8BnZCb6WkWaQHOioOCOcxlhi8KmAcRAlII8LSMKO0B5jnuNiKXNIGLQFAsEhYBBtpeJQuBMvC14ZKpjs5MIkp4ASBhmCOSq+FYfHiF5c9Bo+pqPgmCHP0+YmBg/Tprwk9seIu7m4e3TMnYLbYZIbTGM/mHqh7GszVridsomAP8NTb0MFN+8WbDaGd70b2xGfqQJ16CRgNcl/CfygM8QKDu3E1T7rsQ2XdDYeKrAAnjabCG52FXgU1wtzIRfms3AUN8iuSlxvAVeNIriqn5GRMk+J7EJOnSrgXSgWciIXchLugXfMacTiuGDC5enBZCRcdQqjiAEZC8sFBKJT4Gtc4KtoQycuIsZ5AiogEy5DFlQo3jZyqMv/WeIAFawyW42ZzBigxsus0hqzmJHt3Xfh04LZx6zLllugHNbUcpCRdEBuYUZXdbCcVVrjGmaM8xJWfUd0kE4uhMmwC06AGUxuhJNGX7OL7OKoMFaTP3sK2Ah/ELI5+W0WRaCyLxHjLgoUFAi2CIO698cB5N9ZAv3JnbCWzq0l/3aAxyz/nhm6Dm1c9hcsA07iuzATf6jn31mwHXfJ0cq/48iIU1Ah38uxPLygrh2nmFxAo0mjWltJqybme8xUG/I9a22vTFyXTZsWB5tcQFOndc4bCzrQ2Q1XXf7P5ejFsilsUIeOup3wnYCHYTBlOBee1V7OVSuY6PrI+N6C9xaPvCe+IsvszGyq7L+NPsdhDEbBJaX3xDoiqxWGrxkMo7DBZfMwk5TaZrFRzuQaoykz5wiGO00HG9F3RL8RfbkwGnp1x4YUF5d/Zg0nT5EvB0KUBf6Z3mPyyxp53TxdZDdLZjflg+NMfDUfxi2EkVS7w3fh6E0dOQwxjzO4SMk3iPY3VeyGSSXwEF+EY57FR8UdFIHjzKJWLq20kWrNzSSW1nEqDkrE7jwRusfCoLRvOYbKJFbpp3JmVq29ck3dIG1n4oCABgshlB9F598x8O2hHC6Z25lKgDoxK2JiyBJstBwb8THXo8E2Yx/HH+Q5ZvZX7J+sU9WyorqyOwv4GF4VMpfKbCF+DOvNzv9bpQownfiwqviuAl6g5SrQoRu1EA4TBWjYTeAqKsAXUMOuOJEi+BdKvAlwBSRcsYwKlV1qjZrAIJW8JwW4YQopQfw+RpqipA7WiDpYZGU09SjJIJqONRGno0gysdf7R2ETlR7KHjTlcfm1t8SUTY5iZdSX4uIfz23k19HJ4Bp5PgdeYdAWnBdgstWqfspQx1yMkMedjmLoiyksT+SLPKrFn7LcMVdgI3eX2Cg+8Aqz/51sT4ITUoPym21P8hrlpoyQvyMFX5N7GHT4xzlV6qN+xBFjnUJqNY4YXO2IwZYjvnfDWTxLGfOKXIBn4WzwJdmH/u50rDFiKMDUnZ9U6EElCM9iB2iOVw5xDPozwzs3Dn1LHOPixLk90ICs3gKNxWcjXmjHZTChwpr/gsM4B0aanGyvEihwvMCtJHc2RGB32B7DoVM6g/6zPo0TD3AxoPcEbEYnu4pux3KhEXc8arZSXAR+ATk4ijoet5dQgvtnUiuV0ym9C2nu9GYwLvO1H6pF64nVgBurrL3DDddc/ktUVXSSGbKTzUgio1oI+AOkCbhIfSWGmZ1UX+lF3aN1504YTlqEiTu+ERBGu718uzG0+9+wAlNlqEqe+b5aIwzXbDKPArOTPD3XqqWJFJF+5gk2CQdPwUGxOJg/CoMnwyDqZBwHyRPMjCXNjCM1LPhIm2xNLKZQfAYYQ9jq3S8eevkUf3nAiyNXP8xhQOUQpvZk6xr2QcQ+A0PcGJKFIXw2hNC/VAjh2Fyx72R1ixMsFZtlYLNMbMbd0Iz+ZUAzjg3ViYnKNbNrFGBfW/eQmST/PljJth98i/74W9FvRW+L5tAHVzKZQ62ywHiJLidGHDNJG2yEE1j88OnDEofzxMOJf084TLxhAjOTSdPZlSkkYLJPgNwtO9rkbpLQUWXvCia3emYyk8oXp5h92JxH5zyaM5nPeXdOibuE40zZh5nUmeXuqpnMvo1iaWygmO9y+R+37VIIfNzXfenatGf/7vd37eeyxAijZ4cp6PcrIKiw0DTmoQmjH36Im+9VtmT2r9106QqB49S9XPJ16bIZ0V4czYcdQs6mos7EfCg2Kc/og/n4jjDpqZkB+Vissk/AcSf2Ex1hIF18aLX5W/JVP6rgfuJbvE/gZkrtTR1xIJ3hdvPhatP9ZHub8ZyFd/7kQj/MIv2uMjgPU9lSlVgGk+0pGrkCThgm6XdANpHNZYjthDJ1rjKV4nWSxqUMcmEig0fgLmgFLanvkRY7cQE8iJ9RylYKzFJ4/w2n2xZR3XnuAjQi9WzikwdEG1LOibYBfYdys9ScyOwr3XAID8kt38EWcMlsuh/tCd4lQ7GKZDeQTUw/GeHYMs9oSz7SBQgYI+B5EheFQdALswq4WMYcb2gw4E/gBHo+nD6L8Cm4T6ni2DbP1ASmYKK6UcnmVMabNXH93AnwE7xCfBolunHRpf9YpErC9ipeWxjQSAKhtbg4XKFfl74PEuxSPot7zwtowx0p88xQ6wh5mdRYJQeqMmxAt+ntsN/TNEc3tshQ24ew3WmkKJYEbqHKDdsZ3KPG/QzV6CGcf57i8F1VEDNS5jvxe69nK+QrbAmFYZYb9uN+uQTy4B26jZ4MflM6ZW8Z6thpBNJ9pErAPMjyNsOtuAwycS0p6Sd6zIp+iOcL9grkMqOXkneSVb0iWFyVnUkuWMEnJ3Zdo2AEifM9BNWjwJC+vdFOtEGi5+cCArjjKdNJ9u38E34Ec3EsXCXz1rvhMF39ivfJWCyFUgIpu2mXQ2Uv6XKcNgaTPt8KWAJJXn12YAY8hqXEs7NA26QB6K80ou59BtrAAxSWK8DEyYfWdPf259OZ8DxRTMVzlPFdBC4kUjObMj4N5uMmBWOL4LDTcYLCEPkF3bHUPevCF0BBobS60FugnTtO03dkb6Q0s6NNNed5hFaFnnIbtPVClTzv8l/m9Ua5iko5MwbTmM/sa9z0wlIFO+AYvK3Q17xNhsM1GU5jX8c1oz0lXgNVnFRtdCmAadgZmmHuFu64CrM2e5Mumj5LCel64z/J6C8FPo59BdJbDkZDCDaAmSnccQ1zZ2JnQhacRs9XQR4OpHgQ4SYnBoh+n4rvuaigzAwgswLFZ/eLtly0vXsg7ZEkYbRxthEPfiCucnH1yAffC35dlI0SXSg9o0aFewNUiqUydh8UU5wOB6ve0ksOpSDZHSWGnWzoImAhlApJjpVpOB820Y2B47cCl2CSQAob7oAMfIyOcKCrlG3XKfDnqi/gk/diG1RhewKZGHjgiS+5qcJWsh6fJ4qpQGFz7PyDUeIk99cNkKr5hr4AecNDIbPn++odetKFei/d+ffDflXwpG4HR5FV5zYBT0O8gLeJ0WwMg3vx7RXc8Sbdvo4zR5GqoKoSpdhJJi/QuJhhCW6k9WxGSKreoz7/HeUdyWzQt49Vu41F78sCWnBHtlW6RapyJ1Dl9ri5coNvrNxgX+UO9lWuNV5gygECLzD8xCpa+Y0nmJl3+KrZnpIDBykK6+SqHGryIWRZiM0IzXHClwLmw0wBpWRYCY6Dkfi+4Olidl7WIg7fybXMHE5IVGG+wtpgzwexg8D+ZEUpLMOZdL3kv4eDzv+jCGpLIIWubKtIfl84WKuA5mLlTpWc83EmMaXjJTAORwKpsFG8tqxgOcfvzLVMkgpWE/oeeh6BDgJIBcqtZfRmRiq8hAedNwf15sDbC6pR7g3KxBkK5Tp5US65FuWSa1EuuRblkm9AuagalCurQbmyGpSL8qFcAWGTy38FodxLhHIwgN6MXvYCFm61bmMr2I+DXuUORjXALAYW6J3xgd6VfyvoFfwI6L11M+iF/GeDXkGdynmaMG/tv4p5BfUx77VqzJNVvznmFdTDvG03YN6g/yjMK6iGvOsK8hJ/CvIK6kJe0U2Qd8f/C8grqAd5226AvEb/QZBX8GOQV1QDeS1/a8i7sW6Db6zbW0K8gjqI91E14Nz1GyJeQR3Eq1Gg5W+KeJXPYLm8rm+XD9i2Y7kTNhLXCHmdmQHqV8dn5spIs3V28Ecy0jENNs51UsZfpggFcsc6+u5xGQOJa6DoQR2Knk2j78s96AyvITUCZaRFnnEj+V9/hDyjhlwYgbVnbz5ZVwzMkpHwmIwkB0baYCPM+lmEv0CA8g9cJAFHSMBNPoLBcPHncTJzscQVOESH5rKTjb4uOgWePYUHoBMut9orOuHS/eq39J3Ep7ycWh2DDVYJY0vMjDBbCcQ6bNYQmwNY4lSk0AmWn4IDAs4SKUbIVtgSMi1SYLihXP1+VE6q7LwflxOkX7K4jKqjjDHmlpUZVUeZUbemTIHsA3t1+NCItnlyjenOymhVtXuZEa3QVZbXbnqa1tuEkXAaYuCkDnbPQRvYYaTTc1DV/mlWZY0xvvVJa03c+sIhXebCaZvM3eqE0+oHlaZMNlRnDjGzoXeN6rnZ1LvGQ9Y+0UbDaa8gl/+bxkqnJQFPM4/FebPL/wn9An3ZPLM3O+kykMfwDJxlcIaUwTxYwvAsnmXqJ0KGi3EJg7NEaz2DxZhHSzijLDpZz6KTP2VRaa1FMOSXmnS6jkme8HomefbmVFsE99+ySZXP2M33vUn7FaXJV7ec+T4mMI+4bL7lzH/fm7KWKrec9z4mPlVuMe83EKJdhmLIps/lHH2Ri0XajPbCCUWC7YPLDGIE2wXFDCcI9hZkMxjrW8d497FYsHFI41P11nRuEhYzGC9YImYzHONbx3j3odjHn+hwFBQ7LeZPeQ/bzccxyxUg9UXGQZtR6gpo7sTLhJhZLoMzuKz+P8fw1msjKknjQP16xdesXeFZafOspM2qld5Nz0r1o+1876aLazb60LZLat59Wnp5l9fyrl/uxLu8hjdt1uddXoc3bdfjXTnZ409QBxyu26Crx98JfxXsTerjeF3t9vNweS0YAujivgcCPNwJ6yhydnmN4UW1n2sBZSEBZeHNQJnrA8oPLaBc/0uAMrcOUH5oAeX6fwdQ5oLbB5QfKqBcD+5fGSifrQFKhcQ3+ejnA2VlrsytUVPm/jyi8lokiFB9M+KnkKDciwQbVd/c+AuRoNyLBBFW2yyrjwTlFhJAI6txPn/rUFBeCwU+k34CCsrlqVqTYNIvtel0HZvqQ0G5goJqk/4FLDCbGAthMSyDJfo/6DV0GSy2yVhjoRPiF8M9cK+AeIpyPN4D92A8xTle4D30Do70FOPp2b0Qv4QOLHZGLYnZJ8q4KNu7t0zwMlEaI6K4iBo7Lmoxtxsb3fQ+PCJb7ofsu2AueCDbnRMMjWENtdo1pIg1OjbvcQX0oCpIFXAX0FvXAi7+Qn7KxbugK6aS9BSBkdhVYC4XqeSKBRCJXSCFXqJe3lP1kTHzVigf29O5cqwTqF95Vqr/jUKaKXa9zFLnUBG7UwDz8gos/ttHgh8R70y08lxxYVMeeZBYbN7j+ahy5s88ba/qbjeYzFc9NdrFTto8cegib0M8wyNQxhIKpxbGFvL9eR/k7xPcWKUSZS+rpDFGROePyeNF24q2FRZyKKPDmADTWeXGytdZDc8FFs9hxNPYaLxOm/SFCTidQRmWscKEoulF0/mYZdFLYwRXXK1WTuM+8cHS/ct4bMLUhIQEjkfosN1opf7T5wq93n0Ie20QrTwcj/HMkl1YWLijsJjnjc4fJcZxQTrAXmJH4sTe/IN57/NtUwunbZvO4RixgmlkX+UGQynaKs/H9ANi6go4b6xwomW+UpCET02I5cv2L/1A7OOKGyquxF3ELI1eNoZP30EmbON4TJk/jZQxNvjMv1THpXG/jkcv1fFo3K/gUPernu2vyh6vBoT17PD+D0ENXg66TQQ1hMu3yfYNXayJ838Aa02YrgB4nGNgZGBg4GGAACYGNgZGBmkglmWQA5KqQMjIoAmEjAzaDDpA0hgIGQEesQHMAAB4nM1WPUxUQRD+7kQPODmOX48f+T3hCqMRE0NCYoIxlxgxoCEYEAmSKAiEghwtobDQhFhQUdBhKGy4wopLNLEgoaGgoiDGYEVCZSIl47f7fu69dz9ySuFsdndmd2bezO7MvIUPQCmi6IL/frxvEKHZF4k5hFDEdYhA7ftmXs7PoVhhuhehhJSfcpWk/FwLm/NXzh1aNoQhxNHHcRSvMIt5vMF7fMBHtk/kCuESgrhMyWrUog4taEUbOjGMEUxwf0zWqXFMljBJzIcRSZEekFWMyqbeV+ME94rQKPsYlkPyHJJ7n3zDskNqBxfRIseIsndQU78sYwoxyk3JIrmicoDXXPOhmqO/5EBZXnojGKYPrTgnkDX2lBo1lWBf0VhSNvLKbdryTbIm3RKllm36r7SF9U69yZGUMY7t1heMXUL1eflgeJFjJ5VXbtmSl6iJKQ96LP94K5C4V4ssZPuOdJvYuMFvyFiYxJ06DA36XKbVmLZVxpUFmlq3rdiy6FzeyZHD+nVlv00tWH6cHRij/wCy7aK2ziBx6KJO9LjrOq+9gixYtLFV2UjfRUE6XHYX9n0tkbCxddky7sXDoTJv18StbNp1cSTZv9h3vFfwOeibkP7Tn3ZMpeSJnu0IVtF9+svEhzJjzDg9az0dk2e2IZWJFQo6A0+y7mwa2foH+aRdi7bkKJ0LPJWYzvUlF7cz7t6Z84pVtXRFWNJfbjIxpaHHqJpeDczuaC7dBWflhqFBnUYOjs8SSecuK3KY0X+cR6Mj2px87nw8b8hj/2b22mru2jU+XTEzeHgXp674zH7G1t8oE06PvBGVre7+H6Dqg+MfsGb9u1Uk5JDwVPbc0eHKArOWySLbWw9fAjnAyjnHiqqpMX3LzmjLehe67kBn1neO31S22fkYkx8y7eEfd1GeXeeaivoML7oz2K8ao7Z2KZuFfw/KIxf4UcZXXjOxNr7/mnGXrQO9bJ18pT7g2kM8wnUM4DFuYpDtFp6ydfE9+gy38RyTuINptl7Msd2jNh9nP1/CSvMF1KNcf6lIv2kV+FDFHuQr+RJXa/gaC/E9WqmtuIYIX7zQ9kS4oqj2gt6cdXoM2HQx8QAqoM61ydyNmvvG2MB+ha2Wcy3XLAlrbnRpDGgPZ+iZetn7dDPmSpMyaNWL6Zfyu1z7Wka/G+hPjbaiinrVTSuqCRkRmxcqXB6WaDuD2ouIudvs8lC9d8NsId0CtoQ111q+/QZpHYiheJxNkFtLAmEQhp9dpaLECsKLgo0gtaPHznYwM8tToG1BVNRmCnbYLtb+of/L3r4r+WC+Yd6ZeR8GC5hmjTZ2udJwiX55A58oYdUZjQjps7AJdbygy0IQZLIsDvzfb1aNAhNGN6mCpYkpagxNwVJu4xChyQ0ud9zzRId3uvTw+VFHhDoNWiK45ZEXXvF444PPsQ1llllng0222CZFmgxZcuQ55oRTzihyzj4HHHJEgRIXmrmkwhXXVMVjM8kScW2si2RGfi1mReQyxwPPzMu5R4y+njPmHFOMkyCpG+XZYZc9ozgiWtEN/nnS5P4ANVQjxAAAAHicXc+xS0JRGAXw8+57n08IDBqF4KFh1ywCG2pwuOAiInFBqLWpRadwyGqK6C9oejhFSxDU7F/hYjU2OkioU0NQ5+UzHg4/znfux71wxTi11Doge7DyCi0vzAys98Ycsw9glWF/xo4MmSGsf8rdiL64342zybyEEcP5ATYFIN3gu5/0TgcoSwfaPUQgK6hIlv0WxpsiL1vQ3j3v5YizrMa7Gc9JNHL0SJYKtEZZ2qQWleK5FO+qEVVAkaoJRTfADVUWKdrZn8NFwvFy512oD5xQsEjZ/vl2I0/oetF/KTmrOjqqjTMVQJP5l593aaOX0F3u7h2O0hu4cs4B/xp9mvghM/yb+5j8Av3YTag=",text:"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"};
+</script>
+<script>
+
+/* ---- engine.js ---- */
+'use strict';
+/* =====================================================================
+   ISOLINE — engine
+   Everything is a pure function of absolute time t (seconds, 0..15).
+   No timers, no accumulated state: window.seek(t) renders exactly one frame.
+   ===================================================================== */
+
+// ---------------------------------------------------------------- config
+const Q = new URLSearchParams(location.search);
+const W = +(Q.get('w') || 1920), H = +(Q.get('h') || 1080);
+const PX = H / 1080;                       // design pixels -> device pixels
+const DUR = 15, BPM = 120, BEAT = 60 / BPM, SIX = BEAT / 4;
+const MW = 16 / 9;                         // map half-width (world units); map half-height = 1
+const PLAN_FOV = 30 * Math.PI / 180;
+const PLAN_DIST = 1 / Math.tan(PLAN_FOV / 2);   // camera distance that frames 2u of height
+const WPX = 2 / 1080;                      // world units per design pixel in exact plan framing
+
+const hex = (h) => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
+const INK = hex('#0A0A0B'), PAPER = hex('#F1EEE6'), ORANGE = hex('#FF4A1C'), COBALT = hex('#2B36FF');
+
+// ---------------------------------------------------------------- math
+const PI = Math.PI, TAU = PI * 2, DEG = PI / 180;
+const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
+const mix = (a, b, t) => a + (b - a) * t;
+const mix3 = (a, b, t) => [mix(a[0], b[0], t), mix(a[1], b[1], t), mix(a[2], b[2], t)];
+const unit = (a, b, x) => clamp((x - a) / (b - a));
+const sstep = (a, b, x) => { const t = unit(a, b, x); return t * t * (3 - 2 * t); };
+const E = {
+  outExpo(t, k = 7) { t = clamp(t); return (1 - Math.exp(-k * t)) / (1 - Math.exp(-k)); },
+  inExpo(t, k = 7) { t = clamp(t); return (Math.exp(k * t) - 1) / (Math.exp(k) - 1); },
+  inOutExpo(t, k = 7) { t = clamp(t); return t < 0.5 ? 0.5 * E.inExpo(2 * t, k) : 0.5 + 0.5 * E.outExpo(2 * t - 1, k); },
+  inOutCubic(t) { t = clamp(t); return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; },
+  outCubic(t) { t = clamp(t); return 1 - Math.pow(1 - t, 3); },
+  inCubic(t) { t = clamp(t); return t * t * t; },
+  inOutSine(t) { t = clamp(t); return 0.5 - 0.5 * Math.cos(PI * t); },
+  quintic(t) { t = clamp(t); return t * t * t * (t * (t * 6 - 15) + 10); },
+};
+// critically damped spring step response (starts at rest, no overshoot)
+const spring = (tau, w) => (tau <= 0 ? 0 : 1 - (1 + w * tau) * Math.exp(-w * tau));
+// finite-duration exponential snap (impact-like attack, lands exactly at `dur`)
+const snap = (tau, dur, k = 7) => (tau <= 0 ? 0 : E.outExpo(tau / dur, k));
+// one-sided exponential decay envelope for beat hits
+const hit = (tau, decay) => (tau < 0 ? 0 : Math.exp(-tau / decay));
+
+function cubicBezier(x1, y1, x2, y2) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
+  const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const sx = (t) => ((ax * t + bx) * t + cx) * t, sy = (t) => ((ay * t + by) * t + cy) * t;
+  const dx = (t) => (3 * ax * t + 2 * bx) * t + cx;
+  return (x) => {
+    x = clamp(x); let t = x;
+    for (let i = 0; i < 8; i++) { const e = sx(t) - x, d = dx(t); if (Math.abs(e) < 1e-7 || Math.abs(d) < 1e-7) break; t -= e / d; }
+    let lo = 0, hi = 1;
+    if (Math.abs(sx(t) - x) > 1e-5) { t = x; for (let i = 0; i < 40; i++) { const v = sx(t); if (v < x) lo = t; else hi = t; t = (lo + hi) / 2; } }
+    return sy(clamp(t));
+  };
+}
+
+/* Keyframe track with cubic Hermite interpolation (Catmull-Rom tangents).
+   keys: [[t, value|array, {m: tangent array, hold: bool}]]  period>0 => cyclic */
+function Track(keys, period = 0) {
+  const K = keys.map(([t, v, o]) => ({ t, v: Array.isArray(v) ? v.slice() : [v], o: o || {} }));
+  const n = K.length, dim = K[0].v.length;
+  const key = (i) => {
+    if (!period) return K[Math.max(0, Math.min(n - 1, i))];
+    const w = Math.floor(i / n), k = K[((i % n) + n) % n];
+    return { t: k.t + w * period, v: k.v, o: k.o };
+  };
+  const tan = (i) => {
+    const k = key(i);
+    if (k.o.hold) return new Array(dim).fill(0);
+    if (k.o.m) return k.o.m;
+    if (!period && (i === 0 || i === n - 1)) return new Array(dim).fill(0);
+    const a = key(i - 1), b = key(i + 1);
+    const out = [];
+    for (let d = 0; d < dim; d++) {
+      const s0 = (k.v[d] - a.v[d]) / (k.t - a.t), s1 = (b.v[d] - k.v[d]) / (b.t - k.t);
+      out.push(0.5 * (s0 + s1));
+    }
+    return out;
+  };
+  const M = K.map((_, i) => tan(i));
+  const tanAt = (i) => M[((i % n) + n) % n];
+  return (t) => {
+    if (period) t = ((t % period) + period) % period;
+    let i;
+    if (!period) {
+      if (t <= K[0].t) return K[0].v.slice();
+      if (t >= K[n - 1].t) return K[n - 1].v.slice();
+    }
+    i = n - 1;
+    for (let j = 0; j < n; j++) if (K[j].t > t) { i = j - 1; break; }
+    const a = key(i), b = key(i + 1);
+    const h = b.t - a.t, s = (t - a.t) / h, s2 = s * s, s3 = s2 * s;
+    const h00 = 2 * s3 - 3 * s2 + 1, h10 = s3 - 2 * s2 + s, h01 = -2 * s3 + 3 * s2, h11 = s3 - s2;
+    const ma = tanAt(i), mb = tanAt(i + 1);
+    const out = new Array(dim);
+    for (let d = 0; d < dim; d++) out[d] = h00 * a.v[d] + h10 * h * ma[d] + h01 * b.v[d] + h11 * h * mb[d];
+    return out;
+  };
+}
+
+function mulberry32(a) {
+  return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+function perlin2(seed) {
+  const r = mulberry32(seed), p = new Uint16Array(512), a = [];
+  for (let i = 0; i < 256; i++) a.push(i);
+  for (let i = 255; i > 0; i--) { const j = Math.floor(r() * (i + 1)); const tmp = a[i]; a[i] = a[j]; a[j] = tmp; }
+  for (let i = 0; i < 512; i++) p[i] = a[i & 255];
+  const gx = new Float32Array(256), gy = new Float32Array(256);
+  for (let i = 0; i < 256; i++) { const an = r() * TAU; gx[i] = Math.cos(an); gy[i] = Math.sin(an); }
+  const fade = (t) => t * t * t * (t * (t * 6 - 15) + 10);
+  return (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, X = xi & 255, Y = yi & 255;
+    const g = (ix, iy, dx, dy) => { const h = p[p[ix] + iy]; return gx[h] * dx + gy[h] * dy; };
+    const n00 = g(X, Y, xf, yf), n10 = g(X + 1, Y, xf - 1, yf), n01 = g(X, Y + 1, xf, yf - 1), n11 = g(X + 1, Y + 1, xf - 1, yf - 1);
+    const u = fade(xf), v = fade(yf), a0 = n00 + (n10 - n00) * u, a1 = n01 + (n11 - n01) * u;
+    return a0 + (a1 - a0) * v;
+  };
+}
+
+// vec / mat (column-major, WebGL convention)
+const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const add3 = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const scl3 = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const len3 = (a) => Math.hypot(a[0], a[1], a[2]);
+const norm3 = (a) => { const l = len3(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+function perspective(fovy, aspect, n, f) {
+  const t = 1 / Math.tan(fovy / 2);
+  return new Float32Array([t / aspect, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, (2 * f * n) / (n - f), 0]);
+}
+function lookAt(e, c, u) {
+  const f = norm3(sub3(c, e)), s = norm3(cross3(f, u)), v = cross3(s, f);
+  return new Float32Array([s[0], v[0], -f[0], 0, s[1], v[1], -f[1], 0, s[2], v[2], -f[2], 0, -dot3(s, e), -dot3(v, e), dot3(f, e), 1]);
+}
+function mul4(a, b) {
+  const o = new Float32Array(16);
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+    let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k]; o[i * 4 + j] = s;
+  }
+  return o;
+}
+function xform(m, p) {
+  const x = p[0], y = p[1], z = p[2];
+  return [m[0] * x + m[4] * y + m[8] * z + m[12], m[1] * x + m[5] * y + m[9] * z + m[13], m[2] * x + m[6] * y + m[10] * z + m[14], m[3] * x + m[7] * y + m[11] * z + m[15]];
+}
+
+/* Camera: orbit around a target. yaw rotates around +Y, pitch is elevation above the ground plane
+   (90deg = plan view, screen-up = world -Z = "north"). */
+function camera(c) {
+  const cp = Math.cos(c.pitch), sp = Math.sin(c.pitch), cy = Math.cos(c.yaw), sy = Math.sin(c.yaw);
+  const dir = [cp * sy, sp, cp * cy];
+  const tgt = [c.tx, c.ty, c.tz];
+  const eye = add3(tgt, scl3(dir, c.dist));
+  const up = [-sp * sy, cp, -sp * cy];
+  const roll = c.roll || 0;
+  let upv = up;
+  if (roll) { const side = cross3(scl3(dir, -1), up); upv = add3(scl3(up, Math.cos(roll)), scl3(side, Math.sin(roll))); }
+  const view = lookAt(eye, tgt, upv);
+  const near = c.near || Math.max(0.004, c.dist * 0.01), far = c.far || 60;
+  const proj = perspective(c.fov, W / H, near, far);
+  return { view, proj, vp: mul4(proj, view), eye, dir, near, far, fov: c.fov };
+}
+function project(cam, p) {
+  const c = xform(cam.vp, p);
+  return [(c[0] / c[3] * 0.5 + 0.5) * W, (0.5 - c[1] / c[3] * 0.5) * H, c[3]];
+}
+
+// ---------------------------------------------------------------- distance transform (Felzenszwalb; tiny-sdf style)
+const INF = 1e20;
+function edt1d(grid, offset, stride, length, f, v, z) {
+  v[0] = 0; z[0] = -INF; z[1] = INF; f[0] = grid[offset];
+  for (let q = 1, k = 0, s = 0; q < length; q++) {
+    f[q] = grid[offset + q * stride];
+    const q2 = q * q;
+    do { const r = v[k]; s = (f[q] - f[r] + q2 - r * r) / (q - r) / 2; } while (s <= z[k] && --k > -1);
+    k++; v[k] = q; z[k] = s; z[k + 1] = INF;
+  }
+  for (let q = 0, k = 0; q < length; q++) {
+    while (z[k + 1] < q) k++;
+    const r = v[k], qr = q - r;
+    grid[offset + q * stride] = f[r] + qr * qr;
+  }
+}
+function edt2d(grid, w, h) {
+  const n = Math.max(w, h), f = new Float64Array(n), v = new Uint16Array(n), z = new Float64Array(n + 1);
+  for (let x = 0; x < w; x++) edt1d(grid, x, w, h, f, v, z);
+  for (let y = 0; y < h; y++) edt1d(grid, y * w, 1, w, f, v, z);
+}
+// alpha (0..255, row-major, top row first) -> signed distance in pixels (negative inside)
+function sdfFromAlpha(alpha, w, h) {
+  const N = w * h, outer = new Float64Array(N), inner = new Float64Array(N), out = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    const a = alpha[i] / 255;
+    if (a >= 1) { outer[i] = 0; inner[i] = INF; }
+    else if (a <= 0) { outer[i] = INF; inner[i] = 0; }
+    else { const d = 0.5 - a; outer[i] = d > 0 ? d * d : 0; inner[i] = d < 0 ? d * d : 0; }
+  }
+  edt2d(outer, w, h); edt2d(inner, w, h);
+  for (let i = 0; i < N; i++) out[i] = Math.sqrt(outer[i]) - Math.sqrt(inner[i]);
+  return out;
+}
+
+// ---------------------------------------------------------------- WebGL
+const canvas = document.getElementById('film');
+canvas.width = W; canvas.height = H;
+canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+const gl = canvas.getContext('webgl2', { antialias: true, alpha: false, depth: true, stencil: false, preserveDrawingBuffer: true, premultipliedAlpha: false });
+if (!gl) throw new Error('WebGL2 unavailable');
+const FLOAT_LINEAR = !!gl.getExtension('OES_texture_float_linear');
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    const log = gl.getShaderInfoLog(s);
+    const lines = src.split('\n').map((l, i) => (i + 1) + ': ' + l).join('\n');
+    throw new Error('shader: ' + log + '\n' + lines);
+  }
+  return s;
+}
+function Program(vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vs)); gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('link: ' + gl.getProgramInfoLog(p));
+  const cache = {};
+  return {
+    p,
+    u: (n) => (n in cache ? cache[n] : (cache[n] = gl.getUniformLocation(p, n))),
+    a: (n) => gl.getAttribLocation(p, n),
+    use() { gl.useProgram(p); return this; },
+  };
+}
+function fieldTexture(data, w, h) {
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texImage2D(gl.TEXTURE_2D, 0, FLOAT_LINEAR ? gl.R32F : gl.R16F, w, h, 0, gl.RED, gl.FLOAT, data);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+function byteTexture(data, w, h) {
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, w, h, 0, gl.RED, gl.UNSIGNED_BYTE, data);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+// growable float buffer for per-frame geometry
+class FBuf {
+  constructor(n = 1 << 16) { this.a = new Float32Array(n); this.n = 0; }
+  reset() { this.n = 0; return this; }
+  need(k) { if (this.n + k > this.a.length) { let m = this.a.length * 2; while (m < this.n + k) m *= 2; const b = new Float32Array(m); b.set(this.a.subarray(0, this.n)); this.a = b; } }
+  push(...v) { this.need(v.length); for (let i = 0; i < v.length; i++) this.a[this.n++] = v[i]; }
+  view() { return this.a.subarray(0, this.n); }
+}
+
+/* ---- fields.js ---- */
+/* =====================================================================
+   FIELDS — scalar fields sampled on one shared grid over the map region.
+   Map region (plan coords q): x in [-MW, MW], y in [-1, 1]; world z = -q.y.
+   Texel (i,j) centre: x = -MW + (i+.5)*DX, y = -1 + (j+.5)*DY.
+   ===================================================================== */
+const GX = 768, GY = 432, DX = (2 * MW) / GX, DY = 2 / GY;
+const LEVELS = 30;               // terrain contour levels (field value 0..LEVELS)
+const MAPRECT = [-MW, -1, 2 * MW, 2];
+
+function gridSample(G, x, y) {   // bilinear, matches GL LINEAR filtering on texel centres
+  let fx = (x + MW) / DX - 0.5, fy = (y + 1) / DY - 0.5;
+  fx = clamp(fx, 0, GX - 1.0001); fy = clamp(fy, 0, GY - 1.0001);
+  const i = Math.floor(fx), j = Math.floor(fy), u = fx - i, v = fy - j, k = j * GX + i;
+  const a = G[k], b = G[k + 1], c = G[k + GX], d = G[k + GX + 1];
+  return (a + (b - a) * u) * (1 - v) + (c + (d - c) * u) * v;
+}
+
+/* ---- terrain: a designed island massif, domain-warped ridged noise + sculpted features ---- */
+function buildTerrain() {
+  const n1 = perlin2(1907), n2 = perlin2(4211), n3 = perlin2(733), n4 = perlin2(91);
+  const raw = new Float32Array(GX * GY);
+  const g = (x, y, cx, cy, sx, sy, a, rot = 0) => {
+    const c = Math.cos(rot), s = Math.sin(rot), dx = x - cx, dy = y - cy;
+    const u = (c * dx + s * dy) / sx, v = (-s * dx + c * dy) / sy;
+    return a * Math.exp(-(u * u + v * v));
+  };
+  for (let j = 0; j < GY; j++) for (let i = 0; i < GX; i++) {
+    const x = -MW + (i + 0.5) * DX, y = -1 + (j + 0.5) * DY;
+    // domain warp (large, slow) gives flowing landforms
+    const wx = x + 0.34 * n1(x * 0.7 + 3.1, y * 0.7 - 1.7) + 0.05 * n2(x * 2.6 + 9.2, y * 2.6 + 1.3);
+    const wy = y + 0.34 * n1(x * 0.7 - 4.2, y * 0.7 + 2.3) + 0.05 * n2(x * 2.6 - 5.3, y * 2.6 + 7.7);
+    // three octaves of ridged noise: ridges and valleys, not pockmarks
+    let f = 0, amp = 0.5, fr = 1.15;
+    for (let o = 0; o < 3; o++) { const r = 1 - Math.abs(n2(wx * fr + o * 17.1, wy * fr - o * 9.3) * 1.3); f += amp * r * r * r; amp *= 0.45; fr *= 2.1; }
+    let h = 0.30 * f;
+    h += g(wx, wy, -0.72, 0.10, 0.66, 0.40, 0.70, 0.30);   // west massif
+    h += g(wx, wy, -0.05, -0.12, 1.05, 0.15, 0.30, -0.40); // diagonal ridge
+    h += g(wx, wy, 0.88, 0.20, 0.40, 0.33, 0.55, 0.90);    // east peak
+    h += g(wx, wy, 0.40, -0.48, 0.30, 0.20, 0.22, 0.20);   // south knoll
+    h -= g(wx, wy, 0.15, 0.30, 0.30, 0.22, 0.16, 0.0);     // basin
+    h += 0.05 * n3(wx * 1.8, wy * 1.8);
+    // organic coastline: warped ellipse, exactly flat beyond it
+    const ex = x / (MW * 0.86), ey = y / 0.84;
+    const r = Math.hypot(ex, ey) + 0.10 * n4(x * 1.3 + 2.0, y * 1.3 - 3.0);
+    const m = 1 - sstep(0.62, 1.0, r);
+    raw[j * GX + i] = Math.max(0, h) * m;
+  }
+  // gentle separable blur: removes pixel noise, keeps landforms
+  const tmp = new Float32Array(GX * GY), R = 3, wts = [];
+  for (let k = -R; k <= R; k++) wts.push(Math.exp(-(k * k) / (2 * 1.6 * 1.6)));
+  const ws = wts.reduce((a, b) => a + b, 0);
+  for (let j = 0; j < GY; j++) for (let i = 0; i < GX; i++) { let a = 0; for (let k = -R; k <= R; k++) a += wts[k + R] * raw[j * GX + clamp(i + k, 0, GX - 1)]; tmp[j * GX + i] = a / ws; }
+  for (let j = 0; j < GY; j++) for (let i = 0; i < GX; i++) { let a = 0; for (let k = -R; k <= R; k++) a += wts[k + R] * tmp[clamp(j + k, 0, GY - 1) * GX + i]; raw[j * GX + i] = a / ws; }
+  let mx = 0; for (let k = 0; k < raw.length; k++) mx = Math.max(mx, raw[k]);
+  const out = new Float32Array(GX * GY);
+  for (let k = 0; k < out.length; k++) out[k] = Math.pow(raw[k] / mx, 1.05);
+  return out;            // normalized 0..1 (multiply by LEVELS for contour units)
+}
+
+/* ---- word distance field on the map grid (world units, negative inside) ---- */
+async function buildWordField(word, family, weight, widthU, centerY, res = 2) {
+  // render at `res` x grid resolution, then downsample distances to the grid
+  const cw = GX * res, ch = GY * res;
+  const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
+  const cx = cv.getContext('2d', { willReadFrequently: true });
+  cx.fillStyle = '#000'; cx.fillRect(0, 0, cw, ch);
+  const probe = 200;
+  cx.font = `${weight} ${probe}px "${family}"`;
+  cx.fontKerning = 'normal';
+  const m = cx.measureText(word);
+  const pxPerU = cw / (2 * MW);
+  const targetW = widthU * pxPerU;
+  const visW = m.actualBoundingBoxLeft + m.actualBoundingBoxRight;
+  const size = probe * targetW / visW;
+  cx.font = `${weight} ${size}px "${family}"`;
+  const m2 = cx.measureText(word);
+  const asc = m2.actualBoundingBoxAscent, desc = m2.actualBoundingBoxDescent;
+  const vis = m2.actualBoundingBoxLeft + m2.actualBoundingBoxRight;
+  const x = cw / 2 - vis / 2 + m2.actualBoundingBoxLeft;
+  // canvas y grows downward; q.y = centerY maps to row (1 - centerY)/2 * ch
+  const yc = (1 - centerY) / 2 * ch;
+  const y = yc + (asc - desc) / 2;
+  cx.fillStyle = '#fff';
+  cx.fillText(word, x, y);
+  const img = cx.getImageData(0, 0, cw, ch).data;
+  const alpha = new Uint8Array(cw * ch);
+  for (let i = 0; i < cw * ch; i++) alpha[i] = img[i * 4];
+  const sd = sdfFromAlpha(alpha, cw, ch);
+  // to grid (flip vertical: grid row 0 = q.y = -1 = bottom)
+  const G = new Float32Array(GX * GY), uPerPx = (2 * MW) / cw;
+  for (let j = 0; j < GY; j++) for (let i = 0; i < GX; i++) {
+    let acc = 0;
+    for (let b = 0; b < res; b++) for (let a = 0; a < res; a++) {
+      const px = i * res + a, py = (GY - 1 - j) * res + b;
+      acc += sd[py * cw + px];
+    }
+    G[j * GX + i] = (acc / (res * res)) * uPerPx;
+  }
+  return { G, capU: (asc) * uPerPx, size, widthU: vis * uPerPx, ascU: asc * uPerPx, descU: desc * uPerPx };
+}
+
+/* ---- isobands: terraces from a scalar field (level units) ----
+   caps : x z lv lv 0 0 0 g       (8 floats / vertex, triangles; g = field value, for analytic contour lines)
+   walls: x z lvLo lvHi t nx nz g (8 floats / vertex, triangles)
+   segs : x0 z0 x1 z1 lv          (5 floats / instance)                       */
+function Isobands() {
+  const verts = new FBuf(1 << 20), segs = new FBuf(1 << 18), runs = new FBuf(1 << 16);
+  const P = new Float64Array(48), Q2 = new Float64Array(48);   // scratch polygons (x,y,g)*n
+  function emitTri(ax, ay, bx, by, cx, cy, lv, ga, gb, gc) {
+    verts.need(24); const a = verts.a; let n = verts.n;
+    a[n++] = ax; a[n++] = -ay; a[n++] = lv; a[n++] = lv; a[n++] = 0; a[n++] = 0; a[n++] = 0; a[n++] = ga;
+    a[n++] = bx; a[n++] = -by; a[n++] = lv; a[n++] = lv; a[n++] = 0; a[n++] = 0; a[n++] = 0; a[n++] = gb;
+    a[n++] = cx; a[n++] = -cy; a[n++] = lv; a[n++] = lv; a[n++] = 0; a[n++] = 0; a[n++] = 0; a[n++] = gc;
+    verts.n = n;
+  }
+  function emitWall(ax, ay, bx, by, lo, hi, nx, ny) {
+    // world normal (q.y -> -z)
+    const wx = nx, wz = -ny;
+    verts.need(48); const a = verts.a; let n = verts.n;
+    const V = (x, y, t) => { a[n++] = x; a[n++] = -y; a[n++] = lo; a[n++] = hi; a[n++] = t; a[n++] = wx; a[n++] = wz; a[n++] = hi; };
+    V(ax, ay, 0); V(bx, by, 0); V(bx, by, 1);
+    V(ax, ay, 0); V(bx, by, 1); V(ax, ay, 1);
+    verts.n = n;
+  }
+  // canonical edge crossing: identical result whichever triangle (and direction) asks -> watertight mesh
+  let CX = 0, CY = 0;
+  function cross(ax, ay, ag, bx, by, bg, lv) {
+    if (ax > bx || (ax === bx && ay > by)) { let s = ax; ax = bx; bx = s; s = ay; ay = by; by = s; s = ag; ag = bg; bg = s; }
+    const t = (lv - ag) / (bg - ag);
+    CX = ax + (bx - ax) * t; CY = ay + (by - ay) * t;
+  }
+  // clip polygon src (len m) keeping g >= lv (sign=+1) or g <= lv (sign=-1); returns new length in dst
+  function clip(src, m, dst, lv, sign) {
+    let k = 0;
+    for (let i = 0; i < m; i++) {
+      const j = (i + 1) % m;
+      const ax = src[i * 3], ay = src[i * 3 + 1], ag = src[i * 3 + 2];
+      const bx = src[j * 3], by = src[j * 3 + 1], bg = src[j * 3 + 2];
+      const ain = sign > 0 ? ag >= lv : ag <= lv, bin = sign > 0 ? bg >= lv : bg <= lv;
+      if (ain) { dst[k * 3] = ax; dst[k * 3 + 1] = ay; dst[k * 3 + 2] = ag; k++; }
+      if (ain !== bin) { cross(ax, ay, ag, bx, by, bg, lv); dst[k * 3] = CX; dst[k * 3 + 1] = CY; dst[k * 3 + 2] = lv; k++; }
+    }
+    return k;
+  }
+  function tri(x0, y0, g0, x1, y1, g1, x2, y2, g2, L) {
+    const gmin = Math.min(g0, g1, g2), gmax = Math.max(g0, g1, g2);
+    const lo = clamp(Math.floor(gmin), 0, L), hi = clamp(Math.floor(gmax), 0, L);
+    if (lo === hi) { emitTri(x0, y0, x1, y1, x2, y2, lo, g0, g1, g2); return; }
+    for (let lv = lo; lv <= hi; lv++) {
+      P[0] = x0; P[1] = y0; P[2] = g0; P[3] = x1; P[4] = y1; P[5] = g1; P[6] = x2; P[7] = y2; P[8] = g2;
+      let m = 3, src = P, dst = Q2;
+      if (lv > lo) { m = clip(src, m, dst, lv, +1); const t = src; src = dst; dst = t; }
+      if (lv < hi) { m = clip(src, m, dst, lv + 1, -1); const t = src; src = dst; dst = t; }
+      for (let k = 1; k + 1 < m; k++) emitTri(src[0], src[1], src[k * 3], src[k * 3 + 1], src[(k + 1) * 3], src[(k + 1) * 3 + 1], lv, src[2], src[k * 3 + 2], src[(k + 1) * 3 + 2]);
+    }
+    // gradient of the linear interpolant -> outward (downhill) wall normal
+    const ex1 = x1 - x0, ey1 = y1 - y0, ex2 = x2 - x0, ey2 = y2 - y0, dg1 = g1 - g0, dg2 = g2 - g0;
+    const det = ex1 * ey2 - ex2 * ey1;
+    let gx = (dg1 * ey2 - dg2 * ey1) / det, gy = (ex1 * dg2 - ex2 * dg1) / det;
+    const gl_ = Math.hypot(gx, gy) || 1; gx /= gl_; gy /= gl_;
+    for (let lv = lo + 1; lv <= hi; lv++) {
+      // two crossing points of g = lv on the triangle edges
+      let c = 0, ax = 0, ay = 0, bx = 0, by = 0;
+      const E3 = [[x0, y0, g0, x1, y1, g1], [x1, y1, g1, x2, y2, g2], [x2, y2, g2, x0, y0, g0]];
+      for (const e of E3) {
+        if ((e[2] < lv) !== (e[5] < lv)) {
+          cross(e[0], e[1], e[2], e[3], e[4], e[5], lv);
+          const px = CX, py = CY;
+          if (c === 0) { ax = px; ay = py; } else { bx = px; by = py; }
+          c++;
+        }
+      }
+      if (c < 2) continue;
+      emitWall(ax, ay, bx, by, lv - 1, lv, -gx, -gy);
+      segs.need(5); const s = segs.a; let n = segs.n;
+      s[n++] = ax; s[n++] = -ay; s[n++] = bx; s[n++] = -by; s[n++] = lv; segs.n = n;
+    }
+  }
+  // average wall normals across segments that share an endpoint (removes faceting on curved walls)
+  const acc = new Map();
+  function smoothWallNormals() {
+    acc.clear();
+    const a = verts.a, n = verts.n;
+    const key = (i) => Math.round(a[i] * 2e5) + ',' + Math.round(a[i + 1] * 2e5) + ',' + a[i + 3];
+    for (let i = 0; i < n; i += 8) {
+      if (a[i + 5] === 0 && a[i + 6] === 0) continue;
+      const k = key(i); let v = acc.get(k); if (!v) { v = [0, 0]; acc.set(k, v); }
+      v[0] += a[i + 5]; v[1] += a[i + 6];
+    }
+    for (let i = 0; i < n; i += 8) {
+      if (a[i + 5] === 0 && a[i + 6] === 0) continue;
+      const v = acc.get(key(i)), l = Math.hypot(v[0], v[1]) || 1;
+      a[i + 5] = v[0] / l; a[i + 6] = v[1] / l;
+    }
+  }
+  /* G: field in level units on the shared grid. sub: grid stride (1 = full res). */
+  function build(G, L, sub = 1) {
+    verts.reset(); segs.reset(); runs.reset();
+    const nx = Math.floor((GX - 1) / sub) + 1, ny = Math.floor((GY - 1) / sub) + 1;
+    const X = (i) => -MW + (i * sub + 0.5) * DX, Y = (j) => -1 + (j * sub + 0.5) * DY;
+    const val = (i, j) => G[(j * sub) * GX + i * sub] + 1e-4;
+    for (let j = 0; j < ny - 1; j++) {
+      let runStart = -1, runLv = -1;
+      const y0 = Y(j), y1 = Y(j + 1);
+      const flush = (iEnd) => {
+        if (runStart >= 0) {
+          const e = 0.35 * DX, xa = X(runStart) - e, xb = X(iEnd) + e, ya = y0 - e, yb = y1 + e, gm = runLv + 0.5, lv = runLv;
+          runs.need(48); const a = runs.a; let n = runs.n;
+          for (const [x, y] of [[xa, ya], [xb, ya], [xb, yb], [xa, ya], [xb, yb], [xa, yb]]) { a[n++] = x; a[n++] = -y; a[n++] = lv; a[n++] = lv; a[n++] = 0; a[n++] = 0; a[n++] = 0; a[n++] = gm; }
+          runs.n = n;
+        }
+        runStart = -1; runLv = -1;
+      };
+      for (let i = 0; i < nx - 1; i++) {
+        const ga = val(i, j), gb = val(i + 1, j), gc = val(i + 1, j + 1), gd = val(i, j + 1);
+        const mn = Math.min(ga, gb, gc, gd), mx = Math.max(ga, gb, gc, gd);
+        const lo = clamp(Math.floor(mn), 0, L), hi = clamp(Math.floor(mx), 0, L);
+        if (lo === hi && (lo === 0 || mn - lo > 0.12) && (lo === L || lo + 1 - mx > 0.12)) {
+          if (runStart >= 0 && runLv === lo) continue;
+          flush(i); runStart = i; runLv = lo; continue;
+        }
+        flush(i);
+        const xa = X(i), xb = X(i + 1);
+        tri(xa, y0, ga, xb, y0, gb, xb, y1, gc, L);
+        tri(xa, y0, ga, xb, y1, gc, xa, y1, gd, L);
+      }
+      flush(nx - 1);
+    }
+    smoothWallNormals();
+    const nTri = verts.n / 8;
+    verts.need(runs.n); verts.a.set(runs.a.subarray(0, runs.n), verts.n); verts.n += runs.n;   // runs appended last
+    return { verts: verts.view(), segs: segs.view(), nv: verts.n / 8, ns: segs.n / 5, nTri };
+  }
+  return { build };
+}
+
+/* contour polylines of one level along a horizontal section, used by the interface */
+function sectionProfile(G, y, n = 600) {
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const x = -MW + (i / (n - 1)) * 2 * MW; out[i] = gridSample(G, x, y); }
+  return out;
+}
+
+/* ---- render.js ---- */
+/* =====================================================================
+   RENDERERS
+   ===================================================================== */
+
+/* ---------------- 1. FIELD PLANE: lines as analytic level sets ---------------- */
+const FIELD_VS = `#version 300 es
+in vec2 aPos;
+uniform mat4 uVP;
+uniform vec4 uWhipFrame;   // c.xy, dir.xy  (plan coords)
+uniform vec4 uPulse[4];    // pos, ampV, ampY, sigma
+uniform vec4 uSheet;       // amp, wavelength, phase, along-decay
+out vec3 vW;
+void main(){
+  vec2 q = vec2(aPos.x, -aPos.y);
+  float s = dot(q - uWhipFrame.xy, uWhipFrame.zw);
+  float n = dot(q - uWhipFrame.xy, vec2(-uWhipFrame.w, uWhipFrame.z));
+  float y = 0.;
+  for (int i = 0; i < 4; i++) { float x = (s - uPulse[i].x) / uPulse[i].w; y += uPulse[i].z * exp(-x * x) * exp(-n * n * 0.35); }
+  y += uSheet.x * sin(6.2831853 * s / uSheet.y - uSheet.z) * exp(-abs(s) * uSheet.w);
+  vW = vec3(aPos.x, y, aPos.y);
+  gl_Position = uVP * vec4(vW, 1.);
+}`;
+
+const FIELD_FS = `#version 300 es
+precision highp float;
+in vec3 vW;
+out vec4 oC;
+uniform vec3 uBg;
+uniform vec4 uA0, uA1, uA2, uA3, uA4, uB0, uB1, uB2, uB3, uB4;
+// X0: c.xy dir.xy | X1: W m0 f mode | X2: sp invS v0 hwPx | X3: rgb alpha | X4: hwWorld gapPx idxBoost idxEvery
+uniform vec4 uPulse[4]; uniform vec4 uSag; uniform vec4 uWhipFrame;
+uniform vec4 uWeave;              // dir.xy, front, mode (0 A-top, 1 parity behind front, 2 B-top)
+uniform sampler2D uTerr; uniform vec4 uMapRect; uniform float uK; uniform float uKoff;
+uniform sampler2D uSig; uniform vec4 uSigP; uniform vec4 uSigQ;
+// SigP: amount stretch split blur | SigQ: phase duty morph wipeY
+uniform sampler2D uTit; uniform vec4 uTitP; uniform vec4 uTitQ; uniform vec4 uTitR;
+// TitP: maskB stretch open fill | TitQ: ringAlpha ringSp ringDelta ringCount | TitR: ringW 0 0 0
+uniform float uSweep; uniform float uInside;
+uniform vec3 uRingCol;
+uniform vec3 uEye; uniform vec2 uFog;
+
+float cover(float d, float w) { return max(0., min(d + w * .5, .5) - max(d - w * .5, -.5)); }
+float whipD(float s) {
+  float d = 0.;
+  for (int i = 0; i < 4; i++) { float x = (s - uPulse[i].x) / uPulse[i].w; d += uPulse[i].y * exp(-x * x); }
+  float sl = s / uSag.y; d -= uSag.x * max(0., 1. - sl * sl);
+  return d;
+}
+vec2 subdiv(float v, float Wd, float m0, float f) {
+  float cells = exp2(m0), cw = Wd / cells;
+  float u = (v + Wd * .5) / cw;
+  float cell = floor(u), cu = fract(u) - .5, o = f * .25;
+  float d1 = abs(cu - o), d2 = abs(cu + o);
+  float side = d1 < d2 ? 1. : 0.;
+  float inside = (u >= 0. && u < cells) ? 1. : 0.;
+  return vec2(inside > .5 ? min(d1, d2) * cw : 1e3, cell * 2. + side);
+}
+void main() {
+  vec2 q = vec2(vW.x, -vW.z);
+  float pw = sqrt(abs(dFdx(q.x) * dFdy(q.y) - dFdx(q.y) * dFdy(q.x)));
+  float sW = dot(q - uWhipFrame.xy, uWhipFrame.zw);
+  vec2 nW = vec2(-uWhipFrame.w, uWhipFrame.z);
+  float wd = whipD(sW);
+  vec2 nA = vec2(-uA0.w, uA0.z), nB = vec2(-uB0.w, uB0.z);
+  float vA = dot(q - uA0.xy, nA) - wd * dot(nW, nA);
+  float vB = dot(q - uB0.xy, nB) - wd * dot(nW, nB);
+  vec2 tuv = (q - uMapRect.xy) / uMapRect.zw;
+  float hT = texture(uTerr, tuv).r;
+
+  float FB0 = (vB - uB2.z) * uB2.y / uB2.x;
+  float strip = floor(FB0 + .5);
+  float par = mod(strip, 2.) * 2. - 1.;
+  vec2 lq = vec2(q.x / uSigP.y + par * uSigP.z, q.y);
+  float sdS = texture(uSig, (lq - uMapRect.xy) / uMapRect.zw).r;
+  float aaS = pw * .8 / uSigP.y + uSigP.w;
+  float LS = (1. - smoothstep(-aaS, aaS, sdS)) * uSigP.x * step(uSigQ.w, q.y);
+  float phiB = LS * uSigQ.x * (1. - uSigQ.z) + uK * hT + uKoff;
+  float FB = FB0 + phiB;
+  float FA = (vA - uA2.z) * uA2.y / uA2.x;
+
+  float sdT0 = texture(uTit, tuv).r;
+  float aaT = pw * .8;
+  float LT = 1. - smoothstep(-aaT, aaT, sdT0 - uTitP.w);
+  if (uTitP.y > 1e-4) {            // directional smear: horizontal running max of the letter mask
+    for (int k = -8; k <= 8; k++) {
+      vec2 sq = q + vec2(float(k) / 8. * uTitP.y, 0.);
+      float s = textureLod(uTit, (sq - uMapRect.xy) / uMapRect.zw, 0.).r - uTitP.w;
+      LT = max(LT, 1. - smoothstep(-aaT, aaT, s));
+    }
+  }
+  float ringF = (sdT0 - uTitQ.z) / uTitQ.y;
+
+  float gvA = length(vec2(dFdx(vA), dFdy(vA))), gvB = length(vec2(dFdx(vB), dFdy(vB)));
+  float gFA = length(vec2(dFdx(FA), dFdy(FA))), gFB = length(vec2(dFdx(FB), dFdy(FB)));
+  float gR = length(vec2(dFdx(ringF), dFdy(ringF)));
+
+  // family A
+  float dA, iA, spA;
+  if (uA1.w < .5) { vec2 s = subdiv(vA, uA1.x, uA1.y, uA1.z); dA = s.x / max(gvA, 1e-7); iA = s.y; spA = 1e3; }
+  else { dA = abs(fract(FA + .5) - .5) / max(gFA, 1e-7); iA = floor(FA + .5); spA = 1. / max(gFA, 1e-7); }
+  float wA = max(2. * uA2.w, 2. * uA4.x / max(gvA, 1e-7));
+  float mA = (uA1.w > .5 && uA1.x > 0.) ? step(abs(vA), uA1.x * .5) : 1.;
+  float cA = cover(dA, wA) * mA;
+  cA = mix(cA, min(wA / spA, 1.), smoothstep(3., 1.4, spA));
+
+  // family B
+  float dB, iB, spB;
+  if (uB1.w < .5) { vec2 s = subdiv(vB, uB1.x, uB1.y, uB1.z); dB = s.x / max(gvB, 1e-7); iB = s.y; spB = 1e3; }
+  else { dB = abs(fract(FB + .5) - .5) / max(gFB, 1e-7); iB = floor(FB + .5); spB = 1. / max(gFB, 1e-7); }
+  float wB = max(2. * uB2.w, 2. * uB4.x / max(gvB, 1e-7));
+  float isIdx = abs(mod(iB, uB4.w)) < .5 ? 1. : 0.;
+  float sweepM = 1. - smoothstep(uSweep - .03, uSweep + .03, q.x);
+  wB *= mix(1., uB4.z, isIdx * sweepM);
+  wB += LS * uSigQ.y * min(spB, 60.) * (1. - uSigQ.z);
+  wB = mix(wB, mix(spB + 1.5, wB, uTitP.z), uTitP.x);
+  float mB = ((uB1.w > .5 && uB1.x > 0.) ? step(abs(vB), uB1.x * .5) : 1.) * mix(1., LT, uTitP.x);
+  if (uInside > .5 && uK > 0.) dB = abs(fract(FB) / max(gFB, 1e-7) - wB * .5);
+  float cB = cover(dB, wB) * mB;
+  cB = mix(cB, min(wB / spB, 1.), smoothstep(3., 1.4, spB));
+
+  // rings around the title letters (level sets of the title distance field)
+  float iR = floor(ringF + .5);
+  float dR = abs(ringF - iR) / max(gR, 1e-7);
+  if (uInside > .5) { iR = ceil(ringF); dR = abs((iR - ringF) / max(gR, 1e-7) - uTitR.x * .5); }
+  float cR = cover(dR, uTitR.x) * step(.5, iR) * step(iR, uTitQ.w + .5) * uTitQ.x;
+  cR *= smoothstep(0., pw * 1.5, sdT0);
+
+  bool aTop;
+  if (uWeave.w < .5) aTop = true;
+  else if (uWeave.w < 1.5) { float behind = step(dot(q, uWeave.xy), uWeave.z); aTop = behind * mod(iA + iB, 2.) < .5; }
+  else aTop = false;
+  float gA = cover(dA, wA + 2. * uA4.y) * mA, gB = cover(dB, wB + 2. * uB4.y) * mB;
+
+  float fog = 1. - smoothstep(uFog.x, uFog.y, length(vW - uEye));
+  cA *= fog; cB *= fog; cR *= fog;
+  vec3 col = uBg;
+  col = mix(col, uRingCol, cR);
+  if (aTop) { col = mix(col, uB3.rgb, cB * uB3.a * (1. - gA * uA3.a)); col = mix(col, uA3.rgb, cA * uA3.a); }
+  else { col = mix(col, uA3.rgb, cA * uA3.a * (1. - gB * uB3.a)); col = mix(col, uB3.rgb, cB * uB3.a); }
+  oC = vec4(col, 1.);
+}`;
+
+const FieldPlane = (() => {
+  let prog, vao, count;
+  function init() {
+    prog = Program(FIELD_VS, FIELD_FS);
+    const N = 240, S = 7;                       // grid over [-S,S]^2
+    const v = new Float32Array((N + 1) * (N + 1) * 2);
+    let k = 0;
+    for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) { v[k++] = -S + (2 * S * i) / N; v[k++] = -S + (2 * S * j) / N; }
+    const idx = new Uint32Array(N * N * 6); k = 0;
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const a = j * (N + 1) + i; idx[k++] = a; idx[k++] = a + 1; idx[k++] = a + N + 1; idx[k++] = a + 1; idx[k++] = a + N + 2; idx[k++] = a + N + 1;
+    }
+    count = idx.length;
+    vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+    const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, v, gl.STATIC_DRAW);
+    const l = prog.a('aPos'); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 2, gl.FLOAT, false, 0, 0);
+    const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+    gl.bindVertexArray(null);
+  }
+  function fam(pre, F) {
+    const u = prog.u;
+    const m0 = Math.floor(F.m + 1e-9);
+    gl.uniform4f(u(pre + '0'), F.c[0], F.c[1], Math.cos(F.ang), Math.sin(F.ang));
+    gl.uniform4f(u(pre + '1'), F.W, m0, F.m - m0, F.mode);
+    gl.uniform4f(u(pre + '2'), F.sp, F.invS, F.v0, F.hw * PX);
+    gl.uniform4f(u(pre + '3'), F.col[0], F.col[1], F.col[2], F.alpha);
+    gl.uniform4f(u(pre + '4'), F.hwW, F.gap * PX, F.boost, F.every);
+  }
+  function draw(cam, S, tex) {
+    prog.use(); const u = prog.u;
+    gl.uniformMatrix4fv(u('uVP'), false, cam.vp);
+    gl.uniform3fv(u('uBg'), S.bg);
+    fam('uA', S.A); fam('uB', S.B);
+    const P = new Float32Array(16);
+    for (let i = 0; i < 4; i++) { const p = S.pulses[i] || [0, 0, 0, 1]; P.set(p, i * 4); }
+    gl.uniform4fv(u('uPulse'), P);
+    gl.uniform4f(u('uSag'), S.sag[0], S.sag[1], 0, 0);
+    gl.uniform4f(u('uWhipFrame'), 0, 0, 1, 0);
+    gl.uniform4f(u('uSheet'), S.sheet[0], S.sheet[1], S.sheet[2], S.sheet[3]);
+    gl.uniform4f(u('uWeave'), S.weave[0], S.weave[1], S.weave[2], S.weave[3]);
+    gl.uniform4fv(u('uMapRect'), MAPRECT);
+    gl.uniform1f(u('uK'), S.K); gl.uniform1f(u('uKoff'), S.kOff || 0);
+    gl.uniform4fv(u('uSigP'), S.sigP); gl.uniform4fv(u('uSigQ'), S.sigQ);
+    gl.uniform4fv(u('uTitP'), S.titP); gl.uniform4fv(u('uTitQ'), S.titQ); gl.uniform4f(u('uTitR'), S.ringW * PX, 0, 0, 0);
+    gl.uniform1f(u('uSweep'), S.sweep); gl.uniform1f(u('uInside'), S.inside || 0);
+    gl.uniform3fv(u('uRingCol'), S.ringCol);
+    gl.uniform3fv(u('uEye'), cam.eye); gl.uniform2fv(u('uFog'), S.fog);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex.terr); gl.uniform1i(u('uTerr'), 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, tex.sig); gl.uniform1i(u('uSig'), 1);
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, tex.tit); gl.uniform1i(u('uTit'), 2);
+    gl.bindVertexArray(vao);
+    gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_INT, 0);
+    gl.bindVertexArray(null);
+  }
+  return { init, draw };
+})();
+
+/* ---------------- 2. TERRACES: isoband mesh, extruded per level ---------------- */
+const TERR_VS = `#version 300 es
+in vec2 aPos; in vec3 aLv; in vec2 aN; in float aG;
+uniform mat4 uVP; uniform float uLift[64]; uniform vec4 uXf; // map transform: offset.xz, scale, yOffset
+out vec3 vW; out vec2 vN; out float vT; out float vG; flat out float vLv; flat out float vKind;
+void main(){
+  vG = aG;
+  float y = mix(uLift[int(aLv.x)], uLift[int(aLv.y)], aLv.z);
+  vec2 p = aPos * uXf.z + uXf.xy;
+  vW = vec3(p.x, y * uXf.z + uXf.w, p.y);
+  vN = aN; vT = aLv.z; vLv = aLv.y;
+  vKind = dot(aN, aN) > .01 ? 1. : 0.;
+  gl_Position = uVP * vec4(vW, 1.);
+}`;
+const TERR_FS = `#version 300 es
+precision highp float;
+in vec3 vW; in vec2 vN; in float vT; in float vG; flat in float vLv; flat in float vKind;
+out vec4 oC;
+uniform vec3 uCapLo, uCapHi; uniform vec4 uTint;   // amount, gamma, topLevel, topBoost
+uniform float uLmax;
+uniform vec4 uLine;     // width px, index width px, index every, alpha
+uniform vec3 uLineCol, uInk; uniform float uSkipLevel, uSkipAmt;
+uniform vec2 uLight;
+uniform vec3 uWallLit, uWallDark;
+uniform vec4 uStrata;   // spacing(world), width px, alpha, 0
+uniform vec4 uXf;
+float cover(float d, float w) { return max(0., min(d + w * .5, .5) - max(d - w * .5, -.5)); }
+void main(){
+  vec3 col;
+  float gg = length(vec2(dFdx(vG), dFdy(vG)));
+  if (vKind < .5) {
+    float h = vLv / uLmax;
+    col = mix(uCapLo, uCapHi, pow(h, uTint.y) * uTint.x);
+    if (vLv >= uTint.z - .5) col = mix(col, uCapHi, uTint.w);
+    // contour line: the level set g = level, drawn just inside this cap's outer edge
+    float la = uLine.w * (abs(vLv - uSkipLevel) < .5 ? 1. - uSkipAmt : 1.);
+    if (vLv > .5 && la > 0.) {
+      float w = abs(mod(vLv, uLine.z)) < .5 ? uLine.y : uLine.x;
+      float d = (vG - vLv) / max(gg, 1e-6);
+      float lum = dot(col, vec3(.299, .587, .114));
+      vec3 lc = mix(uLineCol, uInk, smoothstep(.42, .62, lum));
+      col = mix(col, lc, cover(abs(d - w * .5), w) * la);
+    }
+  } else {
+    float lam = dot(normalize(vN), uLight);
+    col = mix(uWallDark, uWallLit, smoothstep(-.4, 1., lam));
+    col *= mix(.62, 1., vT);
+    float f = (vW.y - uXf.w) / uXf.z / uStrata.x;
+    float g = length(vec2(dFdx(f), dFdy(f)));
+    float d = abs(fract(f + .5) - .5) / max(g, 1e-6);
+    col = mix(col, col * .45, cover(d, uStrata.y) * uStrata.z * smoothstep(.6, 2., 1. / max(g, 1e-6)));
+  }
+  oC = vec4(col, 1.);
+}`;
+const TERRL_VS = `#version 300 es
+in vec2 aC;                // corner: along (0|1), side (-1|1)
+in vec4 aSeg; in float aLvl;
+uniform mat4 uVP; uniform vec2 uRes; uniform float uLift[64]; uniform vec4 uXf;
+uniform float uW, uWIdx, uEvery, uBias;
+out float vD; flat out float vWd; flat out float vLv;
+void main(){
+  float y = uLift[int(aLvl)] * uXf.z + uXf.w;
+  vec3 p0 = vec3(aSeg.xy * uXf.z + uXf.xy, y).xzy, p1 = vec3(aSeg.zw * uXf.z + uXf.xy, y).xzy;
+  vec4 c0 = uVP * vec4(p0, 1.), c1 = uVP * vec4(p1, 1.);
+  float wd = abs(mod(aLvl, uEvery)) < .5 ? uWIdx : uW;
+  vec2 s0 = c0.xy / c0.w * .5 * uRes, s1 = c1.xy / c1.w * .5 * uRes;
+  vec2 d = s1 - s0; float L = length(d); d = L > 1e-5 ? d / L : vec2(1., 0.);
+  vec2 n = vec2(-d.y, d.x);
+  float hw = wd * .5 + 1.;
+  vec4 c = mix(c0, c1, aC.x);
+  vec2 off = n * aC.y * hw + d * (aC.x * 2. - 1.) * hw * .5;
+  c.xy += off / (.5 * uRes) * c.w;
+  c.z -= uBias * c.w;
+  gl_Position = c; vD = aC.y * hw; vWd = wd; vLv = aLvl;
+}`;
+const TERRL_FS = `#version 300 es
+precision highp float;
+in float vD; flat in float vWd; flat in float vLv;
+out vec4 oC;
+uniform vec4 uCol; uniform vec4 uColIdx; uniform float uEvery;
+uniform vec3 uCapLo, uCapHi; uniform vec4 uTint; uniform float uLmax; uniform vec3 uInk;
+float cover(float d, float w) { return max(0., min(d + w * .5, .5) - max(d - w * .5, -.5)); }
+void main(){
+  vec4 c = abs(mod(vLv, uEvery)) < .5 ? uColIdx : uCol;
+  // contrast against the cap this contour bounds
+  float tnt = pow(vLv / uLmax, uTint.y) * uTint.x;
+  if (vLv >= uTint.z - .5) tnt = mix(tnt, 1., uTint.w);
+  vec3 cap = mix(uCapLo, uCapHi, tnt);
+  float lum = dot(cap, vec3(.299, .587, .114));
+  c.rgb = mix(c.rgb, uInk, smoothstep(.42, .62, lum));
+  float a = cover(abs(vD), vWd) * c.a;
+  if (a < .003) discard;
+  oC = vec4(c.rgb, a);
+}`;
+
+const Terraces = (() => {
+  let prog, lprog, vao, vbo, lvao, lbo, cornerBuf, nv = 0, ns = 0, nTri = 0;
+  function init() {
+    prog = Program(TERR_VS, TERR_FS);
+    lprog = Program(TERRL_VS, TERRL_FS);
+    vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+    vbo = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    const st = 32;
+    let l;
+    l = prog.a('aPos'); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 2, gl.FLOAT, false, st, 0);
+    l = prog.a('aLv'); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 3, gl.FLOAT, false, st, 8);
+    l = prog.a('aN'); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 2, gl.FLOAT, false, st, 20);
+    l = prog.a('aG'); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 1, gl.FLOAT, false, st, 28);
+    gl.bindVertexArray(null);
+    lvao = gl.createVertexArray(); gl.bindVertexArray(lvao);
+    cornerBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, cornerBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, -1, 1, -1, 0, 1, 1, 1]), gl.STATIC_DRAW);
+    l = lprog.a('aC'); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 2, gl.FLOAT, false, 0, 0);
+    lbo = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, lbo);
+    l = lprog.a('aSeg'); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 4, gl.FLOAT, false, 20, 0); gl.vertexAttribDivisor(l, 1);
+    l = lprog.a('aLvl'); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 1, gl.FLOAT, false, 20, 16); gl.vertexAttribDivisor(l, 1);
+    gl.bindVertexArray(null);
+  }
+  let lastKey = null;
+  function upload(mesh, key) {
+    if (key !== undefined && key === lastKey) return;
+    lastKey = key;
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo); gl.bufferData(gl.ARRAY_BUFFER, mesh.verts, gl.DYNAMIC_DRAW); nv = mesh.nv; nTri = mesh.nTri ?? mesh.nv;
+    gl.bindBuffer(gl.ARRAY_BUFFER, lbo); gl.bufferData(gl.ARRAY_BUFFER, mesh.segs, gl.DYNAMIC_DRAW); ns = mesh.ns;
+  }
+  function liftArray(T) { const a = new Float32Array(64); for (let i = 0; i < 64; i++) a[i] = T.lift(i); return a; }
+  function draw(cam, T) {
+    const lift = liftArray(T);
+    const xf = T.xf || [0, 0, 1, 0];
+    prog.use(); let u = prog.u;
+    gl.uniformMatrix4fv(u('uVP'), false, cam.vp);
+    gl.uniform1fv(u('uLift'), lift);
+    gl.uniform4fv(u('uXf'), xf);
+    gl.uniform3fv(u('uCapLo'), T.capLo); gl.uniform3fv(u('uCapHi'), T.capHi);
+    gl.uniform4fv(u('uTint'), T.tint);
+    gl.uniform1f(u('uLmax'), T.L);
+    gl.uniform2fv(u('uLight'), T.light);
+    gl.uniform3fv(u('uWallLit'), T.wallLit); gl.uniform3fv(u('uWallDark'), T.wallDark);
+    gl.uniform4fv(u('uStrata'), [T.strata[0], T.strata[1] * PX, T.strata[2], 0]);
+    gl.uniform4f(u('uLine'), T.lineW * PX, T.lineWIdx * PX, T.every, T.lineAlpha);
+    gl.uniform3fv(u('uLineCol'), T.lineCol); gl.uniform3fv(u('uInk'), T.lineInk || INK); gl.uniform1f(u('uSkipLevel'), T.skipLevel ?? -9); gl.uniform1f(u('uSkipAmt'), T.skipAmt ?? 1);
+    gl.bindVertexArray(vao);
+    gl.drawArrays(gl.TRIANGLES, 0, nTri);
+    // merged interior runs: pushed back in depth so exact geometry always wins; they only fill sub-pixel cracks
+    gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1.0, 4.0);
+    gl.drawArrays(gl.TRIANGLES, nTri, nv - nTri);
+    gl.disable(gl.POLYGON_OFFSET_FILL);
+    gl.bindVertexArray(null);
+    if (T.segLines && T.lineAlpha > 0.001 && ns > 0) {
+      lprog.use(); u = lprog.u;
+      gl.uniformMatrix4fv(u('uVP'), false, cam.vp);
+      gl.uniform2f(u('uRes'), W, H);
+      gl.uniform1fv(u('uLift'), lift);
+      gl.uniform4fv(u('uXf'), xf);
+      gl.uniform1f(u('uW'), T.lineW * PX); gl.uniform1f(u('uWIdx'), T.lineWIdx * PX); gl.uniform1f(u('uEvery'), T.every);
+      gl.uniform1f(u('uBias'), T.bias || 0.0004);
+      gl.uniform4f(u('uCol'), T.lineCol[0], T.lineCol[1], T.lineCol[2], T.lineAlpha);
+      gl.uniform4f(u('uColIdx'), T.lineColIdx[0], T.lineColIdx[1], T.lineColIdx[2], T.lineAlpha);
+      gl.uniform3fv(u('uCapLo'), T.capLo); gl.uniform3fv(u('uCapHi'), T.capHi); gl.uniform4fv(u('uTint'), T.tint);
+      gl.uniform1f(u('uLmax'), T.L); gl.uniform3fv(u('uInk'), T.lineInk || INK);
+      gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+      gl.bindVertexArray(lvao);
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, ns);
+      gl.bindVertexArray(null);
+      gl.depthMask(true); gl.disable(gl.BLEND);
+    }
+  }
+  return { init, upload, draw };
+})();
+
+/* ---------------- 3. LINES: instanced world-space segments, AA in screen space ---------------- */
+const LINE_VS = `#version 300 es
+in vec2 aC;
+in vec3 aP0; in vec3 aP1; in vec4 aCol; in vec2 aWD;   // width px, dash-phase(unused<0)
+uniform mat4 uVP; uniform vec2 uRes; uniform float uBias;
+out float vD; out vec4 vCol; flat out float vWd;
+void main(){
+  vec4 c0 = uVP * vec4(aP0, 1.), c1 = uVP * vec4(aP1, 1.);
+  // clip against near plane in clip space
+  float e = 1e-4;
+  if (c0.w < e && c1.w < e) { gl_Position = vec4(2., 2., 2., 1.); vD = 0.; vCol = vec4(0.); vWd = 0.; return; }
+  if (c0.w < e) c0 = mix(c0, c1, (e - c0.w) / (c1.w - c0.w));
+  if (c1.w < e) c1 = mix(c1, c0, (e - c1.w) / (c0.w - c1.w));
+  vec2 s0 = c0.xy / c0.w * .5 * uRes, s1 = c1.xy / c1.w * .5 * uRes;
+  vec2 d = s1 - s0; float L = length(d); d = L > 1e-5 ? d / L : vec2(1., 0.);
+  vec2 n = vec2(-d.y, d.x);
+  float hw = aWD.x * .5 + 1.;
+  vec4 c = mix(c0, c1, aC.x);
+  vec2 off = n * aC.y * hw + d * (aC.x * 2. - 1.) * min(hw, aWD.x * .5 + .5);
+  c.xy += off / (.5 * uRes) * c.w;
+  c.z -= uBias * c.w;
+  gl_Position = c; vD = aC.y * hw; vCol = aCol; vWd = aWD.x;
+}`;
+const LINE_FS = `#version 300 es
+precision highp float;
+in float vD; in vec4 vCol; flat in float vWd;
+out vec4 oC;
+float cover(float d, float w) { return max(0., min(d + w * .5, .5) - max(d - w * .5, -.5)); }
+void main(){ float a = cover(abs(vD), vWd) * vCol.a; if (a < .003) discard; oC = vec4(vCol.rgb, a); }`;
+
+const Lines = (() => {
+  let prog, vao, buf, cbuf;
+  const B = new FBuf(1 << 16);
+  function init() {
+    prog = Program(LINE_VS, LINE_FS);
+    vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+    cbuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, cbuf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, -1, 1, -1, 0, 1, 1, 1]), gl.STATIC_DRAW);
+    let l = prog.a('aC'); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 2, gl.FLOAT, false, 0, 0);
+    buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    const st = 48;
+    const at = (n, sz, off) => { const l2 = prog.a(n); gl.enableVertexAttribArray(l2); gl.vertexAttribPointer(l2, sz, gl.FLOAT, false, st, off); gl.vertexAttribDivisor(l2, 1); };
+    at('aP0', 3, 0); at('aP1', 3, 12); at('aCol', 4, 24); at('aWD', 2, 40);
+    gl.bindVertexArray(null);
+  }
+  const begin = () => B.reset();
+  // segment in world space; col = [r,g,b,a]; w in design px
+  function seg(p0, p1, col, w) { B.push(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], col[0], col[1], col[2], col[3], w * PX, 0); }
+  function poly(pts, col, w, closed = false) { for (let i = 0; i + 1 < pts.length; i++) seg(pts[i], pts[i + 1], col, w); if (closed && pts.length > 2) seg(pts[pts.length - 1], pts[0], col, w); }
+  function flush(cam, depthTest = true, bias = 0.0006) {
+    const n = B.n / 12; if (!n) return;
+    prog.use(); const u = prog.u;
+    gl.uniformMatrix4fv(u('uVP'), false, cam.vp); gl.uniform2f(u('uRes'), W, H); gl.uniform1f(u('uBias'), bias);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, B.view(), gl.DYNAMIC_DRAW);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+    if (!depthTest) gl.disable(gl.DEPTH_TEST);
+    gl.bindVertexArray(vao); gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, n); gl.bindVertexArray(null);
+    gl.depthMask(true); gl.disable(gl.BLEND); gl.enable(gl.DEPTH_TEST);
+    B.reset();
+  }
+  return { init, begin, seg, poly, flush };
+})();
+
+/* ---------------- 4. FILLS: world-space or screen-space triangles ---------------- */
+const FILL_VS = `#version 300 es
+in vec3 aP; in vec4 aCol;
+uniform mat4 uVP; uniform vec2 uRes; uniform float uScreen;
+out vec4 vCol;
+void main(){
+  vCol = aCol;
+  if (uScreen > .5) gl_Position = vec4(aP.x / uRes.x * 2. - 1., 1. - aP.y / uRes.y * 2., 0., 1.);
+  else gl_Position = uVP * vec4(aP, 1.);
+}`;
+const FILL_FS = `#version 300 es
+precision highp float; in vec4 vCol; out vec4 oC; void main(){ oC = vCol; }`;
+const Fills = (() => {
+  let prog, vao, buf;
+  const B = new FBuf(1 << 14), BS = new FBuf(1 << 12);
+  function init() {
+    prog = Program(FILL_VS, FILL_FS);
+    vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+    buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    let l = prog.a('aP'); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 3, gl.FLOAT, false, 28, 0);
+    l = prog.a('aCol'); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 4, gl.FLOAT, false, 28, 12);
+    gl.bindVertexArray(null);
+  }
+  function tri(a, b, c, col, screen = false) { const T = screen ? BS : B; for (const p of [a, b, c]) T.push(p[0], p[1], p[2] || 0, col[0], col[1], col[2], col[3]); }
+  function quad(a, b, c, d, col, screen = false) { tri(a, b, c, col, screen); tri(a, c, d, col, screen); }
+  function rectXZ(x0, z0, x1, z1, y, col) { quad([x0, y, z0], [x1, y, z0], [x1, y, z1], [x0, y, z1], col); }
+  function rectPx(x0, y0, x1, y1, col) { quad([x0 * PX, y0 * PX], [x1 * PX, y0 * PX], [x1 * PX, y1 * PX], [x0 * PX, y1 * PX], col, true); }
+  function flush(cam, screenOnly = false) {
+    prog.use(); const u = prog.u;
+    gl.uniformMatrix4fv(u('uVP'), false, cam.vp); gl.uniform2f(u('uRes'), W, H);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.bindVertexArray(vao);
+    if (!screenOnly && B.n) {
+      gl.uniform1f(u('uScreen'), 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, B.view(), gl.DYNAMIC_DRAW);
+      gl.drawArrays(gl.TRIANGLES, 0, B.n / 7); B.reset();
+    }
+    if (BS.n) {
+      gl.disable(gl.DEPTH_TEST); gl.uniform1f(u('uScreen'), 1);
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, BS.view(), gl.DYNAMIC_DRAW);
+      gl.drawArrays(gl.TRIANGLES, 0, BS.n / 7); BS.reset(); gl.enable(gl.DEPTH_TEST);
+    }
+    gl.bindVertexArray(null); gl.disable(gl.BLEND);
+  }
+  return { init, tri, quad, rectXZ, rectPx, flush };
+})();
+
+/* ---- text.js ---- */
+/* =====================================================================
+   TEXT — SDF glyph atlas built at load time from the embedded Inter fonts.
+   Kerning pairs are measured from the browser's shaping of the real font.
+   ===================================================================== */
+const TEXT_VS = `#version 300 es
+in vec3 aP; in vec2 aUV; in vec4 aCol; in vec2 aL; in vec4 aClip;
+uniform mat4 uVP; uniform vec2 uRes; uniform float uScreen;
+out vec2 vUV; out vec4 vCol; out vec2 vL; flat out vec4 vClip;
+void main(){
+  vUV = aUV; vCol = aCol; vL = aL; vClip = aClip;
+  if (uScreen > .5) gl_Position = vec4(aP.x / uRes.x * 2. - 1., 1. - aP.y / uRes.y * 2., 0., 1.);
+  else gl_Position = uVP * vec4(aP, 1.);
+}`;
+const TEXT_FS = `#version 300 es
+precision highp float;
+in vec2 vUV; in vec4 vCol; in vec2 vL; flat in vec4 vClip;
+uniform sampler2D uAtlas;
+out vec4 oC;
+void main(){
+  if (vL.x < vClip.x || vL.y < vClip.y || vL.x > vClip.z || vL.y > vClip.w) discard;
+  float d = texture(uAtlas, vUV).r;
+  float w = max(fwidth(d) * .62, 1e-4);
+  float a = smoothstep(.5 - w, .5 + w, d) * vCol.a;
+  if (a < .003) discard;
+  oC = vec4(vCol.rgb, a);
+}`;
+
+const Text = (() => {
+  const AW = 2048, AH = 2048;
+  const fonts = {};
+  let prog, vao, buf, tex;
+  const BW = new FBuf(1 << 14), BS = new FBuf(1 << 14);
+  const NOCLIP = [-1e9, -1e9, 1e9, 1e9];
+
+  async function loadFonts() {
+    const faces = [new FontFace('IDB', `url(data:font/woff;base64,${window.FONT_DATA.display})`, { weight: '900' }),
+                   new FontFace('IST', `url(data:font/woff;base64,${window.FONT_DATA.text})`, { weight: '600' })];
+    for (const f of faces) { await f.load(); document.fonts.add(f); }
+    await document.fonts.ready;
+  }
+
+  function buildAtlas() {
+    const atlas = new Uint8Array(AW * AH);
+    const cv = document.createElement('canvas'); const cx = cv.getContext('2d', { willReadFrequently: true });
+    const specs = [
+      { key: 'display', css: '900 {s}px "IDB"', em: 150, spread: 14, chars: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,:/-—′+−×°%' },
+      { key: 'text', css: '600 {s}px "IST"', em: 64, spread: 7, chars: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,:;/-–—′\'·×+−=()%°→' },
+    ];
+    let px = 0, py = 0, rowH = 0;
+    for (const sp of specs) {
+      const F = { em: sp.em, spread: sp.spread, g: {}, kern: {} };
+      const css = sp.css.replace('{s}', sp.em);
+      cx.font = css;
+      F.space = cx.measureText(' ').width;
+      const m0 = cx.measureText('H'); F.cap = m0.actualBoundingBoxAscent;
+      for (const ch of sp.chars) {
+        cx.font = css;
+        const m = cx.measureText(ch);
+        const l = Math.ceil(m.actualBoundingBoxLeft) + 1, r = Math.ceil(m.actualBoundingBoxRight) + 1;
+        const a = Math.ceil(m.actualBoundingBoxAscent) + 1, d = Math.ceil(m.actualBoundingBoxDescent) + 1;
+        const gw = l + r + 2 * sp.spread, gh = a + d + 2 * sp.spread;
+        if (px + gw > AW) { px = 0; py += rowH + 1; rowH = 0; }
+        cv.width = gw; cv.height = gh;
+        cx.font = css; cx.fillStyle = '#000'; cx.fillRect(0, 0, gw, gh);
+        cx.fillStyle = '#fff'; cx.textBaseline = 'alphabetic';
+        cx.fillText(ch, sp.spread + l, sp.spread + a);
+        const img = cx.getImageData(0, 0, gw, gh).data;
+        const al = new Uint8Array(gw * gh); for (let i = 0; i < gw * gh; i++) al[i] = img[i * 4];
+        const sd = sdfFromAlpha(al, gw, gh);
+        for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+          const v = clamp(0.5 - sd[y * gw + x] / (2 * sp.spread));
+          atlas[(py + y) * AW + px + x] = Math.round(v * 255);
+        }
+        F.g[ch] = { x: px, y: py, w: gw, h: gh, l: l + sp.spread, a: a + sp.spread, adv: m.width };
+        px += gw + 1; rowH = Math.max(rowH, gh);
+      }
+      // kerning from real shaping
+      cx.font = css;
+      const cs = [...sp.chars];
+      for (const a of cs) for (const b of cs) {
+        const k = cx.measureText(a + b).width - F.g[a].adv - F.g[b].adv;
+        if (Math.abs(k) > 0.01) F.kern[a + b] = k;
+      }
+      fonts[sp.key] = F;
+      px = 0; py += rowH + 2; rowH = 0;
+    }
+    tex = byteTexture(atlas, AW, AH);
+  }
+
+  async function init() {
+    await loadFonts();
+    buildAtlas();
+    prog = Program(TEXT_VS, TEXT_FS);
+    vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+    buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    const st = 15 * 4;
+    const at = (n, sz, off) => { const l = prog.a(n); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, sz, gl.FLOAT, false, st, off); };
+    at('aP', 3, 0); at('aUV', 2, 12); at('aCol', 4, 20); at('aL', 2, 36); at('aClip', 4, 44);
+    gl.bindVertexArray(null);
+  }
+
+  // layout in em-relative units (1 = font size)
+  function layout(fk, str, track = 0) {
+    const F = fonts[fk], out = []; let x = 0;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str[i];
+      if (i > 0) x += (F.kern[str[i - 1] + ch] || 0) / F.em;
+      if (ch === ' ') { out.push({ ch, x, i }); x += F.space / F.em + track; continue; }
+      const g = F.g[ch]; if (!g) { x += F.space / F.em; continue; }
+      out.push({ ch, x, i, g }); x += g.adv / F.em + track;
+    }
+    return { glyphs: out, width: x - track, cap: F.cap / F.em };
+  }
+  /* emit a string.
+     place(lx, ly) -> [x,y,z] maps text-local coords (em units * size, y down from baseline) to output space.
+     opts.glyph(i, n, ch) -> {dx, dy, a, sx, sy} kinetic per-glyph offsets (in size units). */
+  function emit(B, fk, str, size, col, place, opts = {}) {
+    const F = fonts[fk], L = layout(fk, str, opts.track || 0);
+    const ax = opts.align === 'right' ? -L.width : opts.align === 'center' ? -L.width / 2 : 0;
+    const clip = opts.clip || NOCLIP;
+    const n = L.glyphs.length;
+    for (const G of L.glyphs) {
+      if (!G.g) continue;
+      const k = opts.glyph ? opts.glyph(G.i, n, G.ch) : null;
+      const a = col[3] * (k && k.a !== undefined ? k.a : 1);
+      if (a <= 0.002) continue;
+      const g = G.g, s = size / F.em;
+      const sx = k && k.sx !== undefined ? k.sx : 1, sy = k && k.sy !== undefined ? k.sy : 1;
+      const ox = (G.x + ax + (k ? k.dx || 0 : 0)) * size, oy = (k ? k.dy || 0 : 0) * size;
+      const x0 = ox - g.l * s * sx, x1 = ox + (g.w - g.l) * s * sx;
+      const y0 = oy - g.a * s * sy, y1 = oy + (g.h - g.a) * s * sy;
+      const u0 = g.x / AW, v0 = g.y / AH, u1 = (g.x + g.w) / AW, v1 = (g.y + g.h) / AH;
+      const P = [[x0, y0, u0, v0], [x1, y0, u1, v0], [x1, y1, u1, v1], [x0, y1, u0, v1]];
+      const V = P.map(([lx, ly, u, v]) => { const p = place(lx, ly); return [p[0], p[1], p[2] || 0, u, v, col[0], col[1], col[2], a, lx, ly, clip[0], clip[1], clip[2], clip[3]]; });
+      for (const idx of [0, 1, 2, 0, 2, 3]) B.push(...V[idx]);
+    }
+    return L.width * size;
+  }
+  // screen-space text: x,y in design px (baseline-left), size in design px
+  function screen(fk, str, x, y, size, col, opts = {}) {
+    return emit(BS, fk, str, size, col, (lx, ly) => [(x + lx) * PX, (y + ly) * PX, 0], opts);
+  }
+  // world-space text on an arbitrary plane: origin, right & down unit vectors, size in world units
+  function world(fk, str, origin, right, down, size, col, opts = {}) {
+    return emit(BW, fk, str, size, col, (lx, ly) => [origin[0] + right[0] * lx + down[0] * ly, origin[1] + right[1] * lx + down[1] * ly, origin[2] + right[2] * lx + down[2] * ly], opts);
+  }
+  function width(fk, str, size, track = 0) { return layout(fk, str, track).width * size; }
+  function capHeight(fk) { return fonts[fk].cap / fonts[fk].em; }
+  function flush(cam, which = 'both') {
+    prog.use(); const u = prog.u;
+    gl.uniformMatrix4fv(u('uVP'), false, cam.vp); gl.uniform2f(u('uRes'), W, H);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(u('uAtlas'), 0);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+    gl.bindVertexArray(vao);
+    if (which !== 'screen' && BW.n) {
+      gl.uniform1f(u('uScreen'), 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, BW.view(), gl.DYNAMIC_DRAW);
+      gl.drawArrays(gl.TRIANGLES, 0, BW.n / 15); BW.reset();
+    }
+    if (which !== 'world' && BS.n) {
+      gl.disable(gl.DEPTH_TEST); gl.uniform1f(u('uScreen'), 1);
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, BS.view(), gl.DYNAMIC_DRAW);
+      gl.drawArrays(gl.TRIANGLES, 0, BS.n / 15); BS.reset(); gl.enable(gl.DEPTH_TEST);
+    }
+    gl.bindVertexArray(null); gl.depthMask(true); gl.disable(gl.BLEND);
+  }
+  return { init, screen, world, width, capHeight, flush, layout, fonts };
+})();
+
+/* ---- scene.js ---- */
+/* =====================================================================
+   SCENE — the timeline. Every value below is a closed-form function of t.
+   Beat n is at n * 0.5 s. 16th notes at 0.125 s.
+   ===================================================================== */
+const TEX = {};                 // textures (filled in init)
+const FIELDS = {};              // CPU fields (filled in init)
+
+const beat = (n) => n * BEAT;
+const famDefaults = () => ({ c: [0, 0], ang: 0, W: 0, m: 0, mode: 0, sp: 1, invS: 1, v0: 0, hw: 0.5, hwW: 0, col: ORANGE, alpha: 1, gap: 0, boost: 1, every: 5 });
+const fam = (o) => Object.assign(famDefaults(), o);
+
+/* ----------------------------------------------------------------- interface layout (plan view)
+   12-col grid on 1920x1080, 72px margins, 24px gutters. 1 world unit = UI_S px. */
+const UI_S = 1176 / (2 * MW);
+const UI_CX = -MW + (960 - 72) / UI_S, UI_CZ = -1 + (540 - 120) / UI_S;
+const UI_DIST = (540 / UI_S) / Math.tan(15 * DEG);
+const UI_GUT = 24 / UI_S;
+const UI_BOT = UI_CZ + (1008 - 540) / UI_S;      // bottom margin line (world z)
+const UI_RIGHT = UI_CX + (1848 - 960) / UI_S;    // right margin line (world x)
+/* ----------------------------------------------------------------- camera
+   One continuous periodic camera curve: [tx, ty, tz, dist, yaw(deg), pitch(deg), fov(deg)] */
+const PD = PLAN_DIST;
+const CAM_KEYS = [
+  [0.0, [0.3, 0, 0.0, 1.45, -78, 11, 44]],
+  [0.5, [0.25, 0, 0.0, 1.95, -69, 17, 40]],
+  [1.0, [0.08, 0, 0, 2.95, -49, 35, 33]],
+  [1.5, [0.02, 0, 0, 3.45, -21, 63, 31]],
+  [2.0, [0, 0, 0, PD, 0, 90, 30], { hold: true }],
+  [4.0, [0, 0, 0, PD * 0.955, 0, 90, 30]],
+  [5.0, [0, 0, 0, PD * 0.945, 0, 90, 30]],
+  [6.0, [0, 0, 0, PD * 0.915, 0, 90, 30], { hold: true }],
+  [6.5, [-0.2, 0.05, 0.05, 2.7, -26, 52, 32]],
+  [7.0, [-0.45, 0.22, 0.02, 1.7, -64, 24, 40]],
+  [7.5, [0.35, 0.30, 0.0, 1.5, -86, 17, 42]],
+  [8.0, [0.9, 0.32, 0.0, 1.45, -92, 21, 40]],
+  [8.5, [0.55, 0.08, 0.2, 3.7, -38, 60, 34]],
+  [9.0, [UI_CX, 0, UI_CZ, UI_DIST, 0, 90, 30], { hold: true }],
+  [10.0, [UI_CX, 0, UI_CZ, UI_DIST * 0.995, 0, 90, 30]],
+  [11.75, [UI_CX, 0, UI_CZ, UI_DIST * 0.98, 0, 90, 30]],
+  [12.0, [UI_CX, 0, UI_CZ, UI_DIST * 0.975, 0, 90, 30], { m: [-1.4, 0.35, 0.2, -5.0, -26, -70, 10] }],
+  [12.5, [0.05, 0.32, 0.5, 2.55, -26, 29, 38]],
+  [13.0, [0.5, 0.36, 0.06, 2.05, 24, 24, 40]],
+  [13.5, [0.12, 0.15, 0.0, 2.9, 7, 61, 33]],
+  [14.0, [0, 0, 0, PD, 0, 90, 30], { hold: true }],
+  [14.5, [0, 0, 0, PD, 0, 90, 30], { hold: true }],
+];
+let camTrack = Track(CAM_KEYS, DUR);
+function camAt(t) {
+  const v = window.__camOverride ? window.__camOverride : camTrack(t);
+  return camera({ tx: v[0], ty: v[1], tz: v[2], dist: v[3], yaw: v[4] * DEG, pitch: Math.min(90, v[5]) * DEG, fov: v[6] * DEG });
+}
+
+/* ----------------------------------------------------------------- bar 1: thread
+   `u` may be negative: the end of the film evaluates these same functions at u = t - 15. */
+const SPLITS = [0.5, 0.625, 0.75, 0.875, 1.5, 1.625, 1.75, 1.875];
+const mOpen = (u) => { let m = 0; for (const s of SPLITS) m += snap(u - s, 0.11, 6); return m; };
+const bandW = (u) => 0.42 + 0.68 * E.outExpo(unit(0.5, 1.0, u), 5) + 2.9 * E.inOutCubic(unit(1.5, 1.95, u));
+const threadHW = (m) => Math.max(0.65, 3.8 * Math.pow(2, -0.32 * m));
+
+function whipPulses(u) {
+  if (u < 0 || u > 0.9) return [];
+  const env = (1 - Math.exp(-u / 0.022)) * Math.exp(-u / 0.36);
+  const envY = (1 - Math.exp(-u / 0.03)) * Math.exp(-u / 0.30);
+  const c = 4.4, sig = 0.22 + 0.55 * u;
+  return [[c * u, 0.15 * env, 0.1 * envY, sig], [-c * u, 0.15 * env, 0.1 * envY, sig]];
+}
+function sagAt(u) {        // slack before the snap (only exists in the last 0.3 s of the loop)
+  if (u >= 0 || u < -0.3) return [0, 4];
+  const k = 1 - E.inExpo(unit(-0.3, 0, u), 4);
+  return [0.075 * k * sstep(-0.3, -0.22, u), 2.6];
+}
+function sheetWave(u) {
+  let a = 0, ph = 0;
+  for (const [tk, amp] of [[0.5, 0.045], [1.0, 0.035], [1.5, 0.02]]) {
+    const tau = u - tk; if (tau < 0) continue;
+    const e = (1 - Math.exp(-tau / 0.04)) * Math.exp(-tau / 0.22);
+    a += amp * e; ph = TAU * tau / 0.42;
+  }
+  return [a, 1.3, ph, 0.25];
+}
+
+function fieldOpening(u) {
+  const m = mOpen(u), Wd = bandW(u), hw = threadHW(m);
+  const spacePx = (Wd / Math.pow(2, Math.floor(m) + 1)) / WPX;
+  const gap = clamp(0.12 * spacePx, 0, 2.6);
+  const A = fam({ ang: 0, W: Wd, m, mode: 0, hw: 0.5, hwW: hw * WPX, col: ORANGE, gap });
+  const B = fam({ ang: 90 * DEG * E.outExpo(unit(1.0, 1.42, u), 6), W: Wd, m, mode: 0, hw: 0.5, hwW: hw * WPX, col: PAPER, gap });
+  let front = -4;
+  for (let i = 0; i < 6; i++) front += 1.45 * snap(u - (1.0 + i * 0.1), 0.08, 6);
+  return { A, B, pulses: whipPulses(u), sag: sagAt(u), sheet: sheetWave(u),
+           weave: [Math.SQRT1_2, Math.SQRT1_2, front, u >= 1.0 ? 1 : 0] };
+}
+
+/* ----------------------------------------------------------------- bars 2-3: signal -> terrain */
+const SP = 4 / 256;   // grating spacing after full subdivision
+function fieldSignal(t) {
+  // white family ratchets toward the orange: angle halves on every 16th
+  let K = 0; for (let k = 0; k < 12; k++) K += snap(t - (2.0 + k * 0.125), 0.09, 6);
+  const angB = 90 * DEG * Math.pow(2, -K) * (1 - sstep(3.4, 3.7, t));
+  const gap = 0.84 * (1 - E.outExpo(unit(2.0, 2.3, t), 4));
+  // bar 3: exponential stretch of both gratings (lambda -> infinity)
+  const SA = Math.exp(9.5 * Math.pow(unit(4.0, 5.0, t), 1.6));
+  const SB = t >= 5.35 ? Infinity : Math.exp(9.5 * Math.pow(unit(4.45, 5.35, t), 1.5));
+  const hwA = mix(0.65, 1.5, E.inOutCubic(unit(4.6, 5.1, t)));
+  const A = fam({ ang: 0, mode: 1, sp: SP, invS: 1 / SA, v0: SP / 2, hw: hwA, col: ORANGE, gap });
+  const B = fam({ ang: angB, mode: 1, sp: SP, invS: 1 / SB, v0: SP / 2, hw: mix(0.65, 0.6, unit(4.5, 5.5, t)), col: PAPER, gap, boost: 1.9, every: 5 });
+  // SIGNAL: emerges at beat 5, stretches (6), splits (6.5), reconstructs (7), melts (7.5)
+  const amount = t >= 2.5 ? 1 : 0;
+  const wipeY = mix(1.15, -1.15, E.outExpo(unit(2.5, 2.62, t), 4));
+  const stretch = 1 + 1.45 * E.inExpo(unit(3.0, 3.22, t), 5) - 1.45 * E.outExpo(unit(3.5, 3.7, t), 6);
+  const split = 0.42 * (E.outExpo(unit(3.25, 3.36, t), 6) - spring(t - 3.5, 30) * (t >= 3.5 ? 1 : 0));
+  const melt = E.inOutCubic(unit(3.72, 4.25, t));
+  const blur = 0.16 * melt;
+  const phase = 0.5 + 2.6 * melt;
+  const duty = 0.42 * (1 - melt);
+  const morph = E.inOutCubic(unit(3.95, 4.55, t));
+  const Kt = LEVELS * E.inOutCubic(unit(3.85, 4.5, t));
+  // bar 3 beat 11: index-contour sweep, and the weave resolves to "thread on top"
+  const sw = E.inOutCubic(unit(5.5, 5.92, t));
+  const sweep = mix(-2.2, 2.2, sw);
+  const front = t < 5.5 ? 4 : mix(3, -3, sw);
+  return {
+    A, B, pulses: [], sag: [0, 4], sheet: [0, 1, 0, 0],
+    weave: [-1, 0, front, t < 5.95 ? 1 : 0],
+    inside: t >= 5.0 ? 1 : 0,
+    K: Kt, kOff: 0.5 * E.inOutCubic(unit(4.0, 5.0, t)) + 10 * E.inOutCubic(unit(5.0, 6.0, t)), sigP: [amount, stretch, split, blur], sigQ: [phase, duty, morph, wipeY], sweep,
+  };
+}
+
+function fogAt(t) {                 // depth fade, only meaningful while the camera is low
+  const u = t > 7.5 ? t - DUR : t;
+  if (u < -0.45 || u > 2) return [30, 31];
+  const k = u < 0 ? sstep(-0.45, -0.05, u) : 1 - sstep(0.9, 1.8, u);
+  return [mix(30, 4.2, k), mix(31, 7.2, k)];
+}
+function fieldState(t) {
+  let S;
+  if (t < 2.0) S = fieldOpening(t);
+  else if (t < 6.0 + 1e-9) S = fieldSignal(t);
+  else S = fieldEnd(t);
+  return Object.assign({
+    bg: INK, K: 0, sigP: [0, 1, 0, 0], sigQ: [0.5, 0, 0, 2], sweep: -9,
+    titP: [0, 0, 1, 0], titQ: [0, 0.03, 0, 0], ringW: 1.2, ringCol: PAPER, fog: fogAt(t),
+  }, S);
+}
+
+/* ----------------------------------------------------------------- final half bar: title -> thread
+   u = t - 15 (negative). From u = -0.25 the families are the opening's own functions. */
+const LT = 12, RSP = 0.026;          // title field: plateau level and ring spacing (world units)
+const MERGES = [-0.25, -0.1875, -0.125, -0.0625];
+function fieldEnd(t) {
+  const u = t - DUR;
+  const capU = FIELDS.tit.ascU;
+  const spT = capU / 16;
+  const open = E.inOutCubic(unit(-0.47, -0.36, u));
+  const smear = 2.4 * E.inExpo(unit(-0.42, -0.26, u), 4);
+  const dil = 0.06 * E.inExpo(unit(-0.38, -0.26, u), 3);
+  let ripple = 0;
+  for (const uk of [-0.75, -0.625]) { const tau = u - uk; if (tau > 0) ripple += (1 - Math.exp(-tau / 0.012)) * Math.exp(-tau / 0.07); }
+  const delta = RSP * 0.28 * ripple - LT * RSP * E.inExpo(unit(-0.5, -0.3, u), 3.5);
+  const ringA = u < -0.3 ? 1 : 0;
+  const O = fieldOpening(u);            // whip/sag/sheet + family A (single thread) from the opening
+  let B;
+  if (u < -0.25) {
+    // solid letters made of 16 horizontal B lines, masked by the title; thinning into stripes
+    B = fam({ ang: 0, mode: 1, sp: spT, invS: 1, v0: spT / 2, W: 16 * spT, hw: mix(0.5, 1.0, open), col: PAPER });
+  } else {
+    let m = 4; for (const tm of MERGES) m -= snap(u - tm, 0.055, 6);
+    B = fam({ ang: 0, mode: 0, W: 16 * spT, m, hw: 0.5, hwW: threadHW(m) * WPX, col: PAPER, gap: O.B.gap });
+  }
+  const A = fam(Object.assign({}, O.A, { W: 16 * spT, m: 0, hwW: mix(1.5, threadHW(0), E.inOutCubic(unit(-0.25, 0, u))) * WPX, gap: u < -0.25 ? 0 : O.A.gap }));
+  return {
+    A, B, pulses: O.pulses, sag: O.sag, sheet: O.sheet,
+    weave: [0, 0, 0, u < -0.25 ? 2 : 0],
+    titP: [u < -0.25 ? 1 : 0, smear, open, dil], titQ: [ringA, RSP, delta, LT - 1], ringW: 1.2, inside: 1,
+  };
+}
+
+/* ----------------------------------------------------------------- captions */
+const CAPTIONS = [
+  { t0: -0.25, t1: 2.0, n: '01', w: 'THREAD' },
+  { t0: 2.0, t1: 4.0, n: '02', w: 'SIGNAL' },
+  { t0: 4.0, t1: 8.0, n: '03', w: 'TERRAIN' },
+  { t0: 8.75, t1: 12.0, n: '04', w: 'SYSTEM', ink: true },
+];
+function drawCaptions(t, col) {
+  const x = 72, y = 76, size = 14, lh = 20;
+  for (const tt of [t, t - DUR]) for (const C of CAPTIONS) {
+    if (tt < C.t0 - 0.01 || tt > C.t1 + 0.4) continue;
+    const str = C.n + '  ' + C.w;
+    const glyph = (i, n) => {
+      const din = spring(tt - C.t0 - i * 0.022, 34), dout = spring(tt - C.t1 - i * 0.018, 34);
+      return { dy: (1 - din) * 1.35 - dout * 1.35, a: 1 };
+    };
+    const cc = C.ink ? INK : col;
+    Text.screen('text', str, x, y, size, [cc[0], cc[1], cc[2], 0.92], { track: 0.16, glyph, clip: [-50, -lh * 0.78 / size * size, 4000, lh * 0.3] });
+  }
+}
+
+/* ----------------------------------------------------------------- bar 4: terraces */
+const TERR = {};
+function sceneInit() {
+  const G = new Float32Array(GX * GY);
+  for (let k = 0; k < G.length; k++) G[k] = LEVELS * FIELDS.terr[k] + 0.5;
+  FIELDS.G = G;
+  const iso = Isobands();
+  const m = iso.build(G, LEVELS);
+  TERR.mesh = { verts: m.verts.slice(), segs: m.segs.slice(), nv: m.nv, ns: m.ns, nTri: m.nTri };
+  TERR.iso = iso;
+  buildHypso();
+  // title letter field: plateau LT inside the letters, a contour every RSP outward
+  const GL = new Float32Array(GX * GY), sd = FIELDS.tit.G;
+  for (let k = 0; k < GL.length; k++) GL[k] = clamp(LT - sd[k] / RSP, 0, LT + 0.5);
+  FIELDS.GL = GL;
+  const ml = iso.build(GL, LT);
+  TERR.letters = { verts: ml.verts.slice(), segs: ml.segs.slice(), nv: ml.nv, ns: ml.ns, nTri: ml.nTri };
+  TERR.mix = new Float32Array(GX * GY);
+}
+function climaxMesh(t) {
+  const m = morphAt(t);
+  if (m >= 1) return [TERR.letters, 'letters'];
+  const G = FIELDS.G, GL = FIELDS.GL, M = TERR.mix;
+  for (let k = 0; k < M.length; k++) M[k] = G[k] + (GL[k] - G[k]) * m;
+  return [TERR.iso.build(M, LEVELS), 'morph' + t];
+}
+const LIGHT = (() => { const a = [-0.95, 0.3], l = Math.hypot(a[0], a[1]); return [a[0] / l, a[1] / l]; })();
+const WALL_DARK = [0.085, 0.105, 0.56];
+function tintOf(n, T) { return Math.pow(n / T.L, T.tint[1]) * T.tint[0]; }
+function terrainLift(t) {
+  const L = LEVELS;
+  const gamma = 1 + 0.32 * E.inOutCubic(unit(6.5, 7.05, t));
+  const Htop = 0.5 * (1 + 0.05 * hit(t - 7.0, 0.14) + 0.04 * hit(t - 7.5, 0.14));
+  return (n) => {
+    if (n <= 0) return 0;
+    const nn = Math.min(n, L);
+    const up = E.outCubic((t - 6.0 - 0.013 * nn) / 0.42);
+    const down = E.inOutCubic((t - 8.0 - 0.011 * (L - nn)) / 0.42);
+    return Htop * Math.pow(nn / L, gamma) * up * (1 - down);
+  };
+}
+function terraceState(t) {
+  const tint = E.inOutCubic(unit(6.05, 6.7, t)) * (1 - E.inOutCubic(unit(8.0, 8.5, t)));
+  return {
+    L: LEVELS, lift: terrainLift(t), xf: (() => { const Lo = layoutAt(t); return [Lo.ox, Lo.oz, Lo.ms, 0]; })(),
+    capLo: INK, capHi: PAPER, tint: [tint, 2.4, LEVELS, 0.0],
+    light: LIGHT, wallLit: [0.93, 0.915, 0.885], wallDark: WALL_DARK,
+    strata: [0.5 / LEVELS / 3, 1.0, 0.55],
+    lineW: 1.2, lineWIdx: 2.28, every: 5, lineCol: PAPER, lineColIdx: PAPER, lineAlpha: 1,
+  };
+}
+window.__camCheck = (t0, t1, dt) => {
+  const out = [];
+  for (let t = t0; t <= t1 + 1e-9; t += dt) {
+    const c = camAt(t), e = c.eye, q = [e[0], -e[2]];
+    let h = 0;
+    if (Math.abs(q[0]) < MW && Math.abs(q[1]) < 1) { const T = terraceState(t); h = T.lift(clamp(Math.floor(gridSample(FIELDS.G, q[0], q[1])), 0, LEVELS)); }
+    out.push([+t.toFixed(3), +e[1].toFixed(3), +h.toFixed(3), +(e[1] - h).toFixed(3)]);
+  }
+  return out;
+};
+// remove there-and-back level excursions shorter than `w` samples (a section running along a contour)
+function deblip(lvs, w) {
+  for (let pass = 0; pass < 2; pass++) for (let i = 1; i < lvs.length - 1; i++) if (lvs[i] !== lvs[i - 1]) {
+    let j = i; while (j < lvs.length - 1 && lvs[j] === lvs[i]) j++;
+    if (j - i < w && lvs[j] === lvs[i - 1]) for (let k = i; k < j; k++) lvs[k] = lvs[i - 1];
+  }
+  return lvs;
+}
+// the thread draped over the terraces: a stepped profile along the section line
+function threadProfile(T, y, x0 = -MW - 0.4, x1 = MW + 0.4, n = 900) {
+  const pts = [], lvs = [];
+  for (let i = 0; i <= n; i++) {
+    const x = mix(x0, x1, i / n), inMap = x > -MW && x < MW;
+    lvs.push(inMap ? clamp(Math.floor(gridSample(FIELDS.G, x, y)), 0, T.L) : -1);
+  }
+  // where the thread runs along a contour it would flicker between two levels: hold the previous level through short blips
+  deblip(lvs, 60);
+  let prev = null;
+  for (let i = 0; i <= n; i++) {
+    const x = mix(x0, x1, i / n);
+    const lv = lvs[i];
+    const h = lv >= 0 ? T.lift(lv) : -0.003;
+    if (prev !== null && Math.abs(prev - h) > 1e-6) pts.push([x, prev, -y]);
+    pts.push([x, h, -y]); prev = h;
+  }
+  return pts;
+}
+const SHEET = [-2.6, -1.7, 4.4, 2.3];   // paper sheet extent (x0, z0, x1, z1)
+
+/* ----------------------------------------------------------------- bar 7: the landscape becomes the word */
+const morphAt = (t) => E.outCubic(unit(12.0, 12.8, t));
+function fieldAt(x, y, t) {
+  const a = gridSample(FIELDS.G, x, y), m = morphAt(t);
+  return m <= 0 ? a : mix(a, gridSample(FIELDS.GL, x, y), m);
+}
+function climaxLift(t) {
+  const H = 0.07, comp = 1 - E.inOutCubic(unit(13.42, 14.0, t));
+  const slam = 0.17 * E.outExpo(unit(12.5, 12.62, t), 6);
+  return (n) => {
+    if (n <= 0) return 0;
+    const ne = Math.min(n, LT + 1);
+    const rise = E.outExpo(unit(12.0 + 0.011 * ne, 12.4 + 0.011 * ne, t), 5);
+    return (ne * H * rise + (n >= LT ? slam : 0)) * comp;
+  };
+}
+function climaxState(t) {
+  return {
+    L: LT, lift: climaxLift(t), xf: (() => { const Lo = layoutAt(t); return [Lo.ox, Lo.oz, Lo.ms, 0]; })(),
+    capLo: INK, capHi: PAPER, tint: [0.16 * E.inOutCubic(unit(12.0, 12.4, t)) * (1 - E.inOutCubic(unit(13.42, 14.0, t))), 1.0, LT, E.inOutCubic(unit(12.12, 12.5, t))],
+    light: LIGHT, wallLit: [0.93, 0.915, 0.885], wallDark: WALL_DARK,
+    strata: [0.07 / 4, 1.0, 0.6],
+    lineW: 1.2, lineWIdx: mix(2.28, 1.2, E.inOutCubic(unit(12.0, 12.35, t))), every: 5, lineCol: PAPER, lineColIdx: PAPER, lineAlpha: 1,
+    skipLevel: LT, skipAmt: E.inOutCubic(unit(12.15, 12.55, t)),
+  };
+}
+const threadY = (t) => (t < 12 ? 0 : 0.5 * climaxLift(t)(LT));
+const M_PER_LEVEL = 30;
+
+/* ----------------------------------------------------------------- bars 5-6: interface */
+function layoutAt(t) {
+  const k = spring(t - 10.5, 16) - spring(t - 12.0, 13);
+  const ms = 1 - 0.17 * k;                          // map compresses...
+  const ox = -MW * (1 - ms), oz = -(1 - ms);        // ...anchored at its top-left corner
+  const mx1 = -MW + 2 * MW * ms, mz1 = -1 + 2 * ms;
+  const chartTop = mz1 + UI_GUT, chartBot = UI_BOT; // ...and the section chart takes the room (vertical exaggeration)
+  const colX = mx1 + UI_GUT;
+  return { ms, ox, oz, mx0: -MW, mx1, mz0: -1, mz1, chartTop, chartBot, chartH: chartBot - chartTop, colX, colX1: UI_RIGHT,
+           m2w: (x, z) => [x * ms + ox, z * ms + oz], lz: (n) => chartBot - (n / LEVELS) * (chartBot - chartTop) };
+}
+// section line position (map-local z) and the scan choreography of bar 6
+function sectionZ(t) {
+  let z = -SP / 2;
+  const jumps = [[10.0, -0.44], [11.0, 0.36], [11.5, -0.52], [11.625, -0.18], [11.75, 0.18], [11.875, 0.5], [12.0, 0.0]];
+  let prev = z;
+  for (const [tj, zj] of jumps) { z += (zj - prev) * spring(t - tj, tj >= 11.5 ? 46 : 20); prev = zj; }
+  return z;
+}
+function crossings(z, t, n = 700) {
+  const y = -z, out = [], gs = [], ls = [];
+  for (let i = 0; i <= n; i++) { const x = clamp(-MW + (2 * MW * i) / n, -MW + 1e-4, MW - 1e-4), g = fieldAt(x, y, t); gs.push(g); ls.push(clamp(Math.floor(g), 0, LEVELS)); }
+  deblip(ls, 46);
+  for (let i = 1; i <= n; i++) {
+    if (ls[i] === ls[i - 1]) continue;
+    const pl = ls[i - 1], l = ls[i], lev = Math.max(l, pl), gp = gs[i - 1], g = gs[i];
+    const x0 = -MW + (2 * MW * (i - 1)) / n, x1 = -MW + (2 * MW * i) / n;
+    const f = (lev - gp) / (g - gp || 1);
+    out.push({ x: x0 + (x1 - x0) * clamp(f), from: pl, to: l, lev });
+  }
+  return out;
+}
+function profilePts(cr) {      // stepped profile in (x, level) pairs
+  const pts = [[-MW, 0]];
+  for (const c of cr) { pts.push([c.x, c.from]); pts.push([c.x, c.to]); }
+  pts.push([MW, 0]);
+  return pts;
+}
+function straightPts(cr) {     // data-point polyline, same vertex count as the stepped one
+  const pts = [[-MW, 0]];
+  for (const c of cr) { pts.push([c.x, c.lev]); pts.push([c.x, c.lev]); }
+  pts.push([MW, 0]);
+  return pts;
+}
+const HYPSO = [];
+function buildHypso() {
+  const cnt = new Float64Array(LEVELS + 2);
+  for (let k = 0; k < FIELDS.G.length; k++) cnt[clamp(Math.floor(FIELDS.G[k]), 0, LEVELS)]++;
+  let acc = 0; const cum = new Array(LEVELS + 1);
+  for (let n = LEVELS; n >= 0; n--) { acc += cnt[n]; cum[n] = acc; }
+  for (let n = 0; n <= LEVELS; n++) HYPSO[n] = cum[n] / cum[1];
+}
+const C4 = (c, a = 1) => [c[0], c[1], c[2], a];
+function digitsRoll(value, nd) {          // odometer wheel positions, most significant first
+  const out = [];
+  for (let i = nd - 1; i >= 0; i--) {
+    const p = value / Math.pow(10, i);
+    if (i === 0) { out.push(p); continue; }
+    const lower = (value % Math.pow(10, i)) / Math.pow(10, i);
+    out.push(Math.floor(p) + E.inOutCubic(unit(0.9, 1.0, lower)));
+  }
+  return out;
+}
+function drawInterface(t, cam) {
+  if (t < 8.0 || t > 14.3) return;
+  const Lo = layoutAt(t), L = LEVELS;
+  const zs = sectionZ(t);
+  const [, zsw] = Lo.m2w(0, zs);
+  const ink = (a) => C4(INK, a), paper = (a) => C4(PAPER, a), orange = (a) => C4(ORANGE, a), cobalt = (a) => C4(COBALT, a);
+  const cr = crossings(zs, t);
+  const Y = 0.002;
+  // climax: the chart hinges up about its bottom edge, the right column about its left edge
+  const fold = E.outExpo(unit(12.0, 12.42, t), 6) * PI / 2;
+  const cF = Math.cos(fold), sF = Math.sin(fold);
+  const CH = (p) => { const w = p[2] - Lo.chartBot; return [p[0], p[1] * cF - w * sF, Lo.chartBot + w * cF + p[1] * sF]; };
+  const CHd = [0, -sF, cF];                     // chart "down" vector
+  const RC = (p) => { const e = p[0] - Lo.colX; return [Lo.colX + e * cF - p[1] * sF, p[1] * cF + e * sF, p[2]]; };
+  const RCr = [cF, sF, 0];                      // column "right" vector
+  const quadC = (a, b, c, d, col) => Fills.quad(CH(a), CH(b), CH(c), CH(d), col);
+  const yT = threadY(t);
+  // -------- the thread on the map (section line); in the climax it rises to run through the letters
+  const trim = E.inOutCubic(unit(8.1, 8.7, t));
+  const ext = mix(MW + 0.6, MW, trim);
+  const xa = Lo.m2w(-ext, zs)[0], xb = Lo.m2w(ext, zs)[0];
+  if (t < 12.0) Lines.seg([xa, Y + yT, zsw], [xb, Y + yT, zsw], orange(1), 3.0);
+  else {
+    // the thread runs through the letters: draw only the spans where it is outside them
+    const m = morphAt(t), n = 600; let run = null;
+    for (let i = 0; i <= n; i++) {
+      const x = mix(-MW, MW, i / n);
+      const inside = m > 0.5 && gridSample(FIELDS.tit.G, x, -zs) < 0;
+      const p = [Lo.m2w(x, 0)[0], Y + yT, zsw];
+      if (!inside) { if (!run) run = p; if (i === n) Lines.seg(run, p, orange(1), 3.0); }
+      else if (run) { Lines.seg(run, p, orange(1), 3.0); run = null; }
+    }
+  }
+  if (t > 13.9) return;
+  // -------- ghost profile: stands where the terrain was, folds flat, slides into the chart, straightens
+  const fl = E.inOutCubic(unit(8.42, 8.78, t));
+  const slide = E.inOutExpo(unit(8.72, 9.12, t), 6);
+  const straight = E.inOutCubic(unit(9.25, 9.6, t));
+  const chartScale = E.inOutCubic(unit(8.4, 8.8, t));
+  const st = profilePts(cr), sp = straightPts(cr);
+  const h3 = (n) => 0.5 * Math.pow(n / L, 1.32);
+  const hc = (n) => (n / L) * Lo.chartH;
+  const prof = st.map((p, i) => {
+    const lev = mix(p[1], sp[i][1], straight);
+    const h = mix(h3(lev), hc(lev), chartScale);
+    const [x] = Lo.m2w(p[0], 0);
+    const phi = fl * PI / 2;
+    const base = mix(zsw, Lo.chartBot, slide);
+    const q = [x, h * Math.cos(phi) + Y * 2, base - h * Math.sin(phi)];
+    return slide >= 1 ? CH(q) : q;
+  });
+  // black section fill (the cut face of the block) sweeps in left to right
+  const reveal = E.inOutCubic(unit(9.25, 9.7, t));
+  if (reveal > 0) {
+    const xr = mix(-MW, MW, reveal);
+    for (let i = 0; i + 1 < st.length; i++) {
+      const la = st[i][0], lb = st[i + 1][0];
+      if (la > xr) break;
+      const lva = mix(st[i][1], sp[i][1], straight), lvb = mix(st[i + 1][1], sp[i + 1][1], straight);
+      const f = lb > xr ? (xr - la) / (lb - la || 1) : 1;
+      const ax = Lo.m2w(la, 0)[0], bx = Lo.m2w(mix(la, lb, f), 0)[0];
+      const az = Lo.lz(lva), bz = Lo.lz(mix(lva, lvb, f));
+      quadC([ax, Y, az], [bx, Y, bz], [bx, Y, Lo.chartBot], [ax, Y, Lo.chartBot], ink(1));
+    }
+  }
+  // chart gridlines = contour levels; index levels labelled in metres
+  const grid = E.outCubic(unit(8.9, 9.35, t));
+  if (grid > 0) {
+    const x0 = Lo.m2w(-MW, 0)[0], x1 = Lo.m2w(MW, 0)[0];
+    for (let n = 0; n <= L; n++) {
+      const z = Lo.lz(n), idx = n % 5 === 0;
+      const g = clamp(grid * 1.6 - n / L * 0.6);
+      Lines.seg(CH([x0, Y, z]), CH([mix(x0, x1, g), Y, z]), ink(idx ? 0.42 : 0.14), idx ? 1.0 : 0.8);
+      if (idx && g > 0.05) {
+        const sz = 11 / UI_S;
+        Text.world('text', String(n * M_PER_LEVEL), CH([x0 - 8 / UI_S, 0.003, z + sz * 0.36]), [1, 0, 0], CHd, sz, ink(0.75 * g), { align: 'right', track: 0.04 });
+      }
+    }
+  }
+  // projection lines: contour x thread intersections drop to their level -> data points
+  const drop0 = 8.95;
+  cr.forEach((c) => {
+    const [x] = Lo.m2w(c.x, 0);
+    const z1 = Lo.lz(c.lev);
+    const tk = drop0 + Math.floor((c.x + MW) / (2 * MW) * 8) * 0.0625;
+    const d = snap(t - tk, 0.16, 6);
+    if (d <= 0) return;
+    const zEnd = mix(zsw, z1, d);
+    const zMapEdge = Lo.m2w(0, 1)[1];
+    if (fold <= 0) {
+      Lines.seg([x, Y, zsw], [x, Y, Math.min(zEnd, zMapEdge)], paper(0.55), 1.0);       // over the black map
+      if (zEnd > zMapEdge) Lines.seg([x, Y, zMapEdge], [x, Y, zEnd], ink(0.5), 1.0);   // over the paper
+    } else {
+      Lines.seg([x, Y + yT, zsw], CH([x, Y, z1]), ink(0.5 * cF + 0.25), 1.0);           // strings to the standing wall
+    }
+    if (d > 0.98) { const s = 2.6 / UI_S; quadC([x - s, Y * 1.5, z1 - s], [x + s, Y * 1.5, z1 - s], [x + s, Y * 1.5, z1 + s], [x - s, Y * 1.5, z1 + s], c.lev % 5 === 0 ? orange(1) : ink(1)); }
+  });
+  Lines.poly(prof, orange(1), mix(3.0, 2.4, straight));
+  // -------- probe: races along the thread on every beat (ping-pong), cursor into the chart
+  const pr = E.outCubic(unit(9.45, 9.75, t)) * (1 - E.inOutCubic(unit(11.9, 12.1, t)));
+  let xp = -MW;
+  // the probe sweeps the island between its coastline crossings on the current section
+  const xl = cr.length ? cr[0].x + 0.03 : -1.2, xr = cr.length ? cr[cr.length - 1].x - 0.03 : 1.2;
+  if (t > 9.5) { const ph = (t - 9.5) / 0.5, k = Math.floor(ph), f = E.inOutCubic(ph - k); const a = k % 2 === 0 ? f : 1 - f; xp = mix(xl, xr, a); }
+  else xp = xl;
+  const xpe = xp;
+  const gp = fieldAt(xpe, -zs, t), lvp = clamp(Math.floor(gp), 0, L);
+  const elev = Math.max(0, (gp - 0.5)) * M_PER_LEVEL;
+  if (pr > 0) {
+    const [x] = Lo.m2w(xpe, 0);
+    const zc = Lo.lz(Math.max(0, gp - 0.5));
+    const s = 5 / UI_S;
+    Lines.seg([x, Y, zsw], [x, Y, zc], cobalt(pr), 1.5);
+    Fills.rectXZ(x - s, zsw - s, x + s, zsw + s, Y * 2, cobalt(pr));
+    Fills.rectXZ(x - s, zc - s, x + s, zc + s, Y * 2, cobalt(pr));
+  }
+  // -------- right column: elevation numerals, probe coordinates, hypsometry
+  const col = E.outCubic(unit(9.05, 9.35, t));
+  if (col > 0) {
+    const cx = Lo.colX, capU = 0.47, size = capU / Text.capHeight('display');
+    const top = -1 + 18 / UI_S;
+    const TW = (fk, str, x, z, sz, c, o) => Text.world(fk, str, RC([x, 0.003, z]), RCr, [0, 0, 1], sz, c, o);
+    TW('text', 'ELEVATION', cx, top + 11 / UI_S, 12 / UI_S, ink(col), { track: 0.14 });
+    TW('text', 'M', UI_RIGHT, top + 11 / UI_S, 12 / UI_S, ink(col), { track: 0.14, align: 'right' });
+    Lines.seg(RC([cx, Y, top + 22 / UI_S]), RC([mix(cx, UI_RIGHT, col), Y, top + 22 / UI_S]), ink(1), 1.0);
+    const val = mix(0, elev, E.outCubic(unit(9.2, 9.7, t)));
+    const wheels = digitsRoll(val, 3);
+    const cell = Text.width('display', '0', size) * 1.02;
+    const base = top + 40 / UI_S + capU;
+    const roll = 1.3 * capU / size;               // wheel pitch in em
+    const capEm = capU / size;
+    wheels.forEach((w, i) => {
+      const x = cx + i * cell;
+      const d0 = Math.floor(w), f = w - d0;
+      for (const [dg, off] of [[d0, -f], [d0 + 1, 1 - f]]) {
+        const ch = String(((dg % 10) + 10) % 10);
+        const gw = Text.width('display', ch, size);
+        // entry from below on first appearance
+        const enter = 1 - E.outExpo(unit(9.05 + i * 0.04, 9.27 + i * 0.04, t), 5);
+        TW('display', ch, x + (cell - gw) / 2, base, size, ink(1), {
+          glyph: () => ({ dy: (off + enter) * roll }), clip: [-1, -capU * 1.06, 99, capU * 0.1] });
+      }
+    });
+    const small = 12 / UI_S;
+    const fmt = (v) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2);
+    const yl = base + 34 / UI_S;
+    TW('text', 'PROBE', cx, yl, small, ink(col * 0.6), { track: 0.14 });
+    TW('text', 'X ' + fmt(xpe / MW), cx + 84 / UI_S, yl, small, ink(col), { track: 0.1 });
+    TW('text', 'Y ' + fmt(zs), cx + 190 / UI_S, yl, small, ink(col), { track: 0.1 });
+    TW('text', 'L ' + String(lvp).padStart(2, '0'), cx + 296 / UI_S, yl, small, orange(col), { track: 0.1 });
+  }
+  // the section's name, set large: rolls A>B>C on the jumps and races through D..H during the scan
+  if (col > 0) {
+    const secW = (t >= 10 ? spring(t - 10.0, 26) : 0) + (t >= 11 ? spring(t - 11.0, 26) : 0) + [11.5, 11.625, 11.75, 11.875].reduce((a, tk) => a + spring(t - tk, 40), 0);
+    const capL = 0.3, sizeL = capL / Text.capHeight('display'), pitch = 1.3 * capL / sizeL;
+    const xL = UI_RIGHT - Text.width('display', 'W', sizeL), zL = -1 + 40 / UI_S + 0.47 + 34 / UI_S + 26 / UI_S + capL;
+    const k0 = Math.floor(secW), f = secW - k0;
+    for (const [k, off] of [[k0, -f], [k0 + 1, 1 - f]]) {
+      const ch = 'ABCDEFGH'[Math.min(7, k)];
+      const gw = Text.width('display', ch, sizeL);
+      Text.world('display', ch, RC([UI_RIGHT - gw, 0.003, zL]), RCr, [0, 0, 1], sizeL, orange(1), {
+        glyph: () => ({ dy: (off + (1 - E.outExpo(unit(9.15, 9.4, t), 5))) * pitch }), clip: [-1, -capL * 1.06, 99, capL * 0.1] });
+    }
+    Text.world('text', 'SECTION', RC([xL - 0.02, 0.003, zL - capL + 11 / UI_S]), RCr, [0, 0, 1], 12 / UI_S, ink(col), { track: 0.14, align: 'right' });
+  }
+  // hypsometric bars continue the chart's level lines into the right column
+  const hy = t - 9.5;
+  if (hy > 0) {
+    const cx = Lo.colX, wcol = UI_RIGHT - cx;
+    for (let n = 1; n <= L; n++) {
+      const g = snap(hy - (L - n) * 0.009, 0.22, 6);
+      if (g <= 0) continue;
+      const z = Lo.lz(n), th = Math.min(0.42 * (Lo.chartH / L), 5 / UI_S);
+      const len = HYPSO[n] * wcol * g;
+      const c = n === lvp && pr > 0.5 ? orange(1) : ink(n % 5 === 0 ? 1 : 0.8);
+      Fills.quad(RC([cx, Y, z - th]), RC([cx + len, Y, z - th]), RC([cx + len, Y, z + th]), RC([cx, Y, z + th]), c);
+    }
+    Text.world('text', 'HYPSOMETRY', RC([cx, 0.003, Lo.chartTop - 10 / UI_S]), RCr, [0, 0, 1], 12 / UI_S, ink(clamp(hy * 4)), { track: 0.14 });
+  }
+  // module labels (they roll out as the climax takes the sheet)
+  const lab = E.outCubic(unit(9.0, 9.3, t));
+  if (lab > 0) {
+    const sz = 12 / UI_S;
+    const secName = 'ABCDEFGH'[Math.min(7, (t >= 10 ? 1 : 0) + (t >= 11 ? 1 : 0) + (t >= 11.5 ? Math.floor((t - 11.5) / 0.125) + 1 : 0))];
+    const out = (i) => ({ dy: -1.4 * spring(t - 12.0 - i * 0.012, 30) });
+    const clipL = [-99, -sz * 1.0, 99, sz * 0.3];
+    Text.world('text', 'SECTION ' + secName + '—' + secName + '′', CH([Lo.m2w(-MW, 0)[0], 0.003, Lo.chartTop - 10 / UI_S]), [1, 0, 0], CHd, sz, ink(lab), { track: 0.14 });
+    Text.world('text', 'PLAN', [Lo.m2w(-MW, 0)[0] + 14 / UI_S, 0.003, Lo.m2w(0, -1)[1] + 26 / UI_S], [1, 0, 0], [0, 0, 1], sz, paper(lab), { track: 0.14, glyph: out, clip: clipL });
+    const [ax] = Lo.m2w(-MW, 0), [bx] = Lo.m2w(MW, 0);
+    Text.world('text', secName, [ax + 14 / UI_S, 0.003, zsw - 8 / UI_S], [1, 0, 0], [0, 0, 1], sz, paper(lab), { glyph: out, clip: clipL });
+    Text.world('text', secName + '′', [bx - 14 / UI_S, 0.003, zsw - 8 / UI_S], [1, 0, 0], [0, 0, 1], sz, paper(lab), { align: 'right', glyph: out, clip: clipL });
+  }
+}
+
+/* ----------------------------------------------------------------- frame */
+function renderFrame(t) {
+  const cam = camAt(t);
+  gl.viewport(0, 0, W, H);
+  gl.clearColor(INK[0], INK[1], INK[2], 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
+  const useField = t < 6.0 || t >= 14.25;
+  if (useField) {
+    FieldPlane.draw(cam, fieldState(t), TEX);
+  } else {
+    const Lo = layoutAt(t);
+    const p0 = Lo.m2w(-MW, -1), p1 = Lo.m2w(MW, 1);
+    Fills.rectXZ(SHEET[0], SHEET[1], SHEET[2], SHEET[3], -0.004, C4(PAPER));
+    Fills.rectXZ(p0[0], p0[1], p1[0], p1[1], -0.0015, C4(INK));
+    Fills.flush(cam);
+    const climax = t >= 12.0;
+    const T = climax ? climaxState(t) : terraceState(t);
+    if (climax) { const [mesh, key] = climaxMesh(t); Terraces.upload(mesh, key); }
+    else Terraces.upload(TERR.mesh, 'terrain');
+    Terraces.draw(cam, T);
+    Lines.begin();
+    if (t < 8.0) Lines.poly(threadProfile(T, SP / 2), C4(ORANGE), 3.0);
+    drawInterface(t, cam);
+    Fills.flush(cam);
+    Lines.flush(cam, true, 0.0012);
+  }
+  drawCaptions(t, PAPER);
+  Text.flush(cam);
+}
+
+/* ---- audio.js ---- */
+/* =====================================================================
+   SOUNDTRACK — original composition, synthesized with OfflineAudioContext.
+   120 BPM, 4/4, D minor. 15 s = 7 bars + 1/2 bar. 48 kHz stereo.
+   Two identical cycles are rendered and the second is kept, so every tail
+   that crosses 15.000 s wraps into the start: the loop is seamless.
+   Harmony per bar: Dm9 | Dm9 | Bbmaj7 | Gm9 | Fmaj9 | A7sus4-A7 | Dm | Bbmaj9#11 (1/2)
+   ===================================================================== */
+window.renderSoundtrack = async (opts = {}) => {
+  const SR = 48000, CYCLE = 15, NC = opts.verify ? 3 : 2, LEN = CYCLE * NC;
+  const ctx = new OfflineAudioContext(2, SR * LEN, SR);
+  const rnd = mulberry32(20261011);
+  const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
+  const B = (n) => n * 0.5;            // beat -> seconds
+  const S16 = (bar, step) => bar * 2 + step * 0.125;
+
+  // ---------------------------------------------------------- shared resources
+  const noiseBuf = ctx.createBuffer(2, SR * 3, SR);
+  for (let c = 0; c < 2; c++) { const d = noiseBuf.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = rnd() * 2 - 1; }
+  const curve = (drive) => { const n = 2048, c = new Float32Array(n); for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; c[i] = Math.tanh(x * drive) / Math.tanh(drive); } return c; };
+  function IR(sec, decay, seed) {
+    const r = mulberry32(seed), b = ctx.createBuffer(2, Math.floor(SR * sec), SR);
+    for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); for (let i = 0; i < d.length; i++) { const tt = i / SR; d[i] = (r() * 2 - 1) * Math.exp(-tt / decay) * (1 - Math.exp(-tt / 0.004)); } }
+    return b;
+  }
+  const G = (v = 1) => { const g = ctx.createGain(); g.gain.value = v; return g; };
+
+  // ---------------------------------------------------------- buses
+  const master = G(0.9);
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -16; comp.knee.value = 8; comp.ratio.value = 3; comp.attack.value = 0.004; comp.release.value = 0.12;
+  master.connect(comp); comp.connect(ctx.destination);
+  const verb = ctx.createConvolver(); verb.buffer = IR(2.4, 0.55, 99); const verbRet = G(0.32); verb.connect(verbRet); verbRet.connect(master);
+  const room = ctx.createConvolver(); room.buffer = IR(0.6, 0.12, 7); const roomRet = G(0.22); room.connect(roomRet); roomRet.connect(master);
+  const kickBus = G(0.95); kickBus.connect(master);
+  const kickSat = ctx.createWaveShaper(); kickSat.curve = curve(1.8); kickSat.connect(kickBus);
+  const drumBus = G(0.8); drumBus.connect(master);
+  const duck = G(1); duck.connect(master);                 // everything tonal is side-chained to the kick
+  const bassBus = G(0.62); const bassSat = ctx.createWaveShaper(); bassSat.curve = curve(2.6); bassSat.oversample = '2x';
+  bassBus.connect(bassSat); bassSat.connect(duck);
+  const synthBus = G(0.5); synthBus.connect(duck);
+  const subBus = G(0.75); subBus.connect(duck);
+  const send = (node, bus, amt) => { const g = G(amt); node.connect(g); g.connect(bus); };
+
+  // noise read offset is a pure function of the event's position in the cycle -> both cycles are sample-identical
+  function noise(t, dur) {
+    const tl = ((t % CYCLE) + CYCLE) % CYCLE, h = Math.sin(tl * 12.9898 + 0.31) * 43758.5453;
+    const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.start(t, (h - Math.floor(h)) * 1.5, dur + 0.05); return s;
+  }
+  function env(param, t, a, peak, d, floor = 0.0001) {
+    param.setValueAtTime(0, t); param.linearRampToValueAtTime(peak, t + a);
+    param.exponentialRampToValueAtTime(floor, t + a + d); param.linearRampToValueAtTime(0, t + a + d + 0.01);
+  }
+  function pan(node, p) { const n = ctx.createStereoPanner(); n.pan.value = p; node.connect(n); return n; }
+
+  // ---------------------------------------------------------- instruments
+  function kick(t, big = 0) {
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(180 + big * 40, t);
+    o.frequency.exponentialRampToValueAtTime(54, t + 0.042);
+    o.frequency.exponentialRampToValueAtTime(41 - big * 4, t + 0.32 + big * 0.3);
+    const g = G(0); env(g.gain, t, 0.0015, 0.95, 0.40 + big * 0.45);
+    o.connect(g); g.connect(kickSat); o.start(t); o.stop(t + 1.0 + big * 0.5);
+    const n = noise(t, 0.02), hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2500;
+    const gn = G(0); env(gn.gain, t, 0.0008, 0.35, 0.012); n.connect(hp); hp.connect(gn); gn.connect(kickBus);
+    // side-chain duck of tonal bus
+    duck.gain.setValueAtTime(0.32, t); duck.gain.setTargetAtTime(1, t + 0.012, 0.065 + big * 0.03);
+  }
+  function clap(t, vel = 1, wet = 0.22) {
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1350; bp.Q.value = 0.9;
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 450;
+    const g = G(0); bp.connect(hp); hp.connect(g);
+    const out = pan(g, 0.04);
+    out.connect(drumBus); send(out, verb, wet); send(out, room, 0.5);
+    for (const [dt, a, d] of [[0, 0.7, 0.008], [0.0095, 0.75, 0.008], [0.0195, 1, 0.16]]) {
+      const n = noise(t + dt, d + 0.02), gg = G(0); env(gg.gain, t + dt, 0.0006, a * vel, d); n.connect(gg); gg.connect(bp);
+    }
+    g.gain.value = 0.85;
+    const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(205, t); o.frequency.exponentialRampToValueAtTime(140, t + 0.06);
+    const go = G(0); env(go.gain, t, 0.001, 0.35 * vel, 0.08); o.connect(go); go.connect(drumBus); o.start(t); o.stop(t + 0.15);
+  }
+  function hat(t, vel, open = false, p = 0) {
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 7200;
+    const pk = ctx.createBiquadFilter(); pk.type = 'peaking'; pk.frequency.value = 10500; pk.gain.value = 6; pk.Q.value = 1.2;
+    const g = G(0); env(g.gain, t, 0.0007, 0.42 * vel, open ? 0.17 : 0.028);
+    const n = noise(t, open ? 0.25 : 0.06); n.connect(hp); hp.connect(pk); pk.connect(g);
+    const out = pan(g, p); out.connect(drumBus); if (open) send(out, room, 0.4);
+  }
+  function tick(t, f = 3400, vel = 1, p = 0) {
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+    const g = G(0); env(g.gain, t, 0.0005, 0.18 * vel, 0.006); o.connect(g); pan(g, p).connect(drumBus); o.start(t); o.stop(t + 0.03);
+  }
+  function bass(t, dur, m, o = {}) {
+    const f = mtof(m), cut0 = o.cut0 || 1800, cut1 = o.cut1 || 260, vel = o.vel || 1;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = o.q || 7;
+    lp.frequency.setValueAtTime(cut0, t); lp.frequency.exponentialRampToValueAtTime(cut1, t + Math.max(0.05, dur * 0.8));
+    const g = G(0);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.5 * vel, t + 0.003);
+    g.gain.setTargetAtTime(0.32 * vel, t + 0.01, 0.05); g.gain.setValueAtTime(0.32 * vel, t + dur - 0.012); g.gain.linearRampToValueAtTime(0, t + dur);
+    for (const [type, det, lvl] of [['sawtooth', -7, 0.6], ['square', 6, 0.38], ['sawtooth', -1200, 0.5]]) {
+      const osc = ctx.createOscillator(); osc.type = type; osc.frequency.value = f; osc.detune.value = det;
+      if (o.glide) { osc.frequency.setValueAtTime(mtof(o.glide), t); osc.frequency.exponentialRampToValueAtTime(f, t + 0.06); }
+      const gl = G(lvl); osc.connect(gl); gl.connect(lp); osc.start(t); osc.stop(t + dur + 0.02);
+    }
+    lp.connect(g); g.connect(bassBus);
+  }
+  function sub(t, dur, m, lvl = 0.6, dive = 0) {
+    const o = ctx.createOscillator(); o.type = 'sine';
+    if (dive) { o.frequency.setValueAtTime(mtof(m + dive), t); o.frequency.exponentialRampToValueAtTime(mtof(m), t + 0.18); }
+    else o.frequency.value = mtof(m);
+    const g = G(0); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(lvl, t + 0.012);
+    g.gain.setValueAtTime(lvl, t + dur - 0.08); g.gain.linearRampToValueAtTime(0, t + dur);
+    o.connect(g); g.connect(subBus); o.start(t); o.stop(t + dur + 0.02);
+  }
+  function pluck(t, m, vel = 1, p = 0, o = {}) {
+    const f = mtof(m), dec = o.dec || 0.2;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = o.q || 4;
+    lp.frequency.setValueAtTime(o.cut || 5200, t); lp.frequency.exponentialRampToValueAtTime(o.cutEnd || 700, t + dec);
+    const g = G(0); env(g.gain, t, 0.0015, 0.32 * vel, dec);
+    for (const [type, det] of [['sawtooth', -6], ['square', 7]]) {
+      const osc = ctx.createOscillator(); osc.type = type; osc.frequency.value = f; osc.detune.value = det;
+      if (o.bend) { osc.frequency.setValueAtTime(f * Math.pow(2, o.bend / 12), t); osc.frequency.exponentialRampToValueAtTime(f, t + (o.bendT || 0.05)); }
+      osc.connect(lp); osc.start(t); osc.stop(t + dec + 0.05);
+    }
+    lp.connect(g); const out = pan(g, p); out.connect(synthBus); send(out, verb, o.wet ?? 0.25);
+  }
+  function stab(t, ms, dur, o = {}) {
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = o.q || 3;
+    lp.frequency.setValueAtTime(o.cut0 || 6500, t); lp.frequency.exponentialRampToValueAtTime(o.cut1 || 900, t + dur * 0.9);
+    const sat = ctx.createWaveShaper(); sat.curve = curve(o.drive || 1.6);
+    const g = G(0); env(g.gain, t, o.att || 0.002, (o.vel || 1) * 0.16, dur);
+    for (const m of ms) for (const [det, p] of [[-11, -0.5], [9, 0.5], [0, 0]]) {
+      const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = mtof(m); osc.detune.value = det;
+      if (o.bend) { osc.detune.setValueAtTime(det, t); osc.detune.linearRampToValueAtTime(det + o.bend * 100, t + dur); }
+      const pn = ctx.createStereoPanner(); pn.pan.value = p * (o.width ?? 0.7);
+      osc.connect(pn); pn.connect(lp); osc.start(t); osc.stop(t + dur + 0.05);
+    }
+    lp.connect(sat); sat.connect(g); g.connect(synthBus); send(g, verb, o.wet ?? 0.3);
+    return g;
+  }
+  // interference pad: each voice is a pair of saws whose beat frequency follows the moire angle
+  function interference(t0, t1, ms, beatAt) {
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400; lp.Q.value = 1.5;
+    const g = G(0); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.07, t0 + 0.02);
+    g.gain.setValueAtTime(0.07, t1 - 0.06); g.gain.linearRampToValueAtTime(0, t1);
+    lp.frequency.setValueAtTime(900, t0); lp.frequency.exponentialRampToValueAtTime(3800, t1);
+    ms.forEach((m, i) => {
+      const f = mtof(m);
+      const a = ctx.createOscillator(); a.type = 'sawtooth'; a.frequency.value = f;
+      const b = ctx.createOscillator(); b.type = 'sawtooth';
+      b.frequency.setValueAtTime(f + beatAt(0), t0);
+      for (let k = 1; k <= 14; k++) b.frequency.setTargetAtTime(f + beatAt(k), t0 + k * 0.125, 0.012);
+      const pa = ctx.createStereoPanner(); pa.pan.value = -0.6 + i * 0.3; const pb = ctx.createStereoPanner(); pb.pan.value = 0.6 - i * 0.3;
+      a.connect(pa); b.connect(pb); pa.connect(lp); pb.connect(lp);
+      a.start(t0); b.start(t0); a.stop(t1 + 0.02); b.stop(t1 + 0.02);
+    });
+    lp.connect(g); g.connect(synthBus); send(g, verb, 0.2);
+  }
+  function pad(t, dur, ms, o = {}) {
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = o.cut || 2200; lp.Q.value = 0.8;
+    const g = G(0); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(o.vel || 0.05, t + (o.att || 0.03));
+    g.gain.setValueAtTime(o.vel || 0.05, t + dur - (o.rel || 0.2)); g.gain.linearRampToValueAtTime(0, t + dur);
+    ms.forEach((m, i) => { for (const det of [-9, 8]) {
+      const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = mtof(m); osc.detune.value = det;
+      const pn = ctx.createStereoPanner(); pn.pan.value = (det < 0 ? -1 : 1) * (0.3 + 0.1 * i);
+      osc.connect(pn); pn.connect(lp); osc.start(t); osc.stop(t + dur + 0.02);
+    } });
+    lp.connect(g); g.connect(synthBus); send(g, verb, o.wet ?? 0.45);
+  }
+  function riser(t0, t1, lvl = 0.25) {
+    const n = noise(t0, t1 - t0), bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2.2;
+    bp.frequency.setValueAtTime(350, t0); bp.frequency.exponentialRampToValueAtTime(9000, t1);
+    const g = G(0); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(lvl, t1 - 0.004); g.gain.linearRampToValueAtTime(0, t1);
+    n.connect(bp); bp.connect(g); g.connect(drumBus); send(g, verb, 0.3);
+  }
+  function crash(t, lvl = 0.35, dur = 2.4) {
+    const n = noise(t, dur), hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 4200;
+    const g = G(0); env(g.gain, t, 0.001, lvl, dur); n.connect(hp); hp.connect(g); g.connect(drumBus); send(g, verb, 0.4);
+  }
+  function swell(t0, t1, lvl = 0.3) {     // reverse cymbal into the downbeat
+    const n = noise(t0, t1 - t0), hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.setValueAtTime(2500, t0); hp.frequency.exponentialRampToValueAtTime(7000, t1);
+    const g = G(0); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(lvl, t1 - 0.003); g.gain.linearRampToValueAtTime(0, t1);
+    n.connect(hp); hp.connect(g); g.connect(drumBus);
+  }
+
+  // ---------------------------------------------------------- the score
+  const DM9 = [50, 53, 57, 60, 64], BBM7 = [46, 50, 53, 57], GM9 = [43, 46, 50, 53, 57], FM9 = [41, 45, 48, 52, 55];
+  const A7S = [45, 50, 52, 55], A7 = [45, 49, 52, 55], DMC = [50, 57, 62, 65, 69], BBM9 = [46, 53, 57, 60, 64];
+  const ROOT = [38, 38, 34, 31, 41, 33, 38, 34];
+
+  function compose(T) {
+    // kick on every beat (30); section downbeats hit harder
+    for (let b = 0; b < 30; b++) kick(T + B(b), [0, 12, 24, 28].includes(b) ? 1 : 0);
+    // clap on beats 2 & 4 of every bar (and the final upbeat)
+    for (let b = 1; b < 30; b += 2) clap(T + B(b), b === 29 ? 1.1 : 1, b === 23 ? 0.35 : 0.22);
+    // hats: 16ths with groove; open hats on the off-8ths from bar 3; roll at 1.5 and 11.5
+    for (let s = 0; s < 120; s++) {
+      const t = T + s * 0.125, inBeat = s % 4, bar = Math.floor(s / 16);
+      if (bar === 7 && inBeat === 0) continue;
+      const v = [0.45, 0.22, 0.8, 0.3][inBeat] * (bar >= 6 ? 1.15 : 1);
+      if (inBeat === 2 && bar >= 2 && bar !== 3) hat(t, 0.7, true, 0.25); else hat(t, v, false, inBeat % 2 ? -0.3 : 0.3);
+    }
+    for (let k = 0; k < 8; k++) hat(T + 1.5 + 0.0625 + k * 0.0625, 0.35 + k * 0.05, false, k % 2 ? 0.4 : -0.4);   // 32nd roll (densify)
+    // ---- bar 1: the thread. a pluck snaps on the downbeat, then the note-rate doubles on every 16th (1>2>4>8)
+    pluck(T + 0, 74, 1.2, 0, { bend: 7, bendT: 0.06, dec: 0.45, cut: 7000, wet: 0.35 });
+    const arp = [74, 81, 77, 86, 74, 77, 81, 84];
+    [[0.5, 1], [0.625, 2], [0.75, 4], [0.875, 8]].forEach(([t0, n]) => {
+      for (let k = 0; k < n; k++) pluck(T + t0 + k * (0.125 / n), arp[(k + n) % arp.length] - (n > 4 ? 12 : 0), 0.75, (k % 2 ? 0.45 : -0.45), { dec: 0.12, cut: 4800 });
+    });
+    pluck(T + 1.0, 81, 0.9, 0.35, { bend: -5, bendT: 0.18, dec: 0.5, wet: 0.4 });                 // the white thread swings out (a fifth above)
+    // ---- bars 1-2 bass: off-beat pulse, then octave chatter
+    for (let s = 0; s < 32; s++) {
+      const bar = Math.floor(s / 16), st = s % 16, m = ROOT[bar];
+      const on = bar === 0 ? [2, 3, 6, 7, 10, 11, 14, 15].includes(st) : st % 4 !== 0;
+      if (on) bass(T + s * 0.125, 0.11, m + (bar === 1 && st % 4 === 3 ? 12 : 0), { cut0: bar ? 2400 : 1500, vel: st % 4 === 2 ? 1 : 0.8 });
+    }
+    // ---- bar 2: interference (beat rate halves with the moire angle), SIGNAL stab + stretch + stutter
+    interference(T + 2.0, T + 3.95, [50, 57, 65], (k) => 8 * Math.pow(2, -k));
+    stab(T + 2.5, DM9, 0.32, { vel: 1.1, cut0: 7000, cut1: 1200 });
+    stab(T + 3.0, DM9, 0.24, { vel: 0.8, bend: -2, cut0: 4000, cut1: 600 });
+    for (let k = 0; k < 4; k++) stab(T + 3.25 + k * 0.0625, DM9, 0.045, { vel: 0.55, cut0: 3000, cut1: 1500, wet: 0.1 });
+    stab(T + 3.5, DM9, 0.4, { vel: 1.0, cut0: 6500, cut1: 500, wet: 0.45 });
+    // ---- bar 3: contour arpeggio over Bbmaj7, filter opening as the rings close
+    const arp3 = [58, 62, 65, 69, 72, 69, 65, 62];
+    for (let s = 0; s < 16; s++) pluck(T + 4.0 + s * 0.125, arp3[s % 8], 0.6 + 0.4 * (s % 4 === 0), (s % 2 ? 0.35 : -0.35), { dec: 0.16, cut: 900 + 4500 * (s / 15), cutEnd: 500 });
+    for (let s = 0; s < 16; s++) if (s % 4 !== 0) bass(T + 4.0 + s * 0.125, 0.11, ROOT[2] + ([7, 12, 0][s % 3]) * (s % 4 === 3 ? 1 : 0), { cut0: 1200 + 120 * s });
+    riser(T + 5.25, T + 6.0, 0.16);
+    // ---- bar 4: DIMENSIONAL BREAKTHROUGH - sub drop, wide Gm9, half-time bass, arp continues
+    sub(T + 6.0, 1.95, 31, 0.7, 12);
+    pad(T + 6.0, 1.95, GM9, { vel: 0.045, cut: 1600, att: 0.08, wet: 0.6 });
+    crash(T + 6.0, 0.22, 1.8);
+    for (const s of [3, 6, 7, 10, 11, 14, 15]) bass(T + 6.0 + s * 0.125, 0.1, 31 + (s > 9 ? 12 : 0), { cut0: 900, vel: 0.85 });
+    const arp4 = [67, 70, 74, 77, 79, 77, 74, 70];
+    for (let s = 0; s < 16; s += 2) pluck(T + 6.0 + s * 0.125 + 0.0625, arp4[(s / 2) % 8], 0.55, (s % 4 ? 0.5 : -0.5), { dec: 0.3, cut: 3500, wet: 0.55 });
+    riser(T + 7.5, T + 8.0, 0.14);
+    // ---- bar 5: SYSTEM - mechanical 16ths, ticks for each projection line, Fmaj9 plucks
+    for (let s = 0; s < 16; s++) if (s % 4 !== 0) bass(T + 8.0 + s * 0.125, 0.07, ROOT[4] + (s % 4 === 2 ? 12 : 0), { cut0: 2600, cut1: 400, q: 9, vel: 0.85 });
+    for (let k = 0; k < 8; k++) tick(T + 8.95 + k * 0.0625, 3000 + k * 180, 0.9, -0.6 + k * 0.17);
+    for (let s = 0; s < 16; s++) tick(T + 8.0 + s * 0.125 + 0.0625, 5200, 0.35, s % 2 ? 0.5 : -0.5);
+    for (const b of [16, 17, 18, 19]) stab(T + B(b) + 0.25, FM9, 0.12, { vel: 0.5, cut0: 3800, cut1: 1400, width: 1, wet: 0.2 });
+    // the hook: rising three-note figure on the data points
+    [[9.0, 77], [9.125, 81], [9.25, 84], [9.5, 81], [9.625, 84], [9.75, 88]].forEach(([tt, m]) => pluck(T + tt, m, 0.7, 0.2, { dec: 0.18, cut: 6000 }));
+    // ---- bar 6: LIVING SYSTEM - A7sus4 -> A7, driving 16ths, riser + snare roll into the climax
+    for (let s = 0; s < 16; s++) if (s % 4 !== 0) bass(T + 10.0 + s * 0.125, 0.1, ROOT[5] + (s % 4 === 3 ? 12 : 0), { cut0: 1500 + 260 * s, cut1: 380, vel: 0.9 });
+    stab(T + 10.0, A7S, 0.2, { vel: 0.7, cut0: 4000, cut1: 1100 });
+    stab(T + 11.0, A7, 0.2, { vel: 0.75, cut0: 4500, cut1: 1100 });
+    for (let k = 0; k < 16; k++) tick(T + 10.0 + k * 0.125 + 0.0625, 4400 + (k % 4) * 300, 0.4, k % 2 ? 0.6 : -0.6);
+    [[10.25, 81], [10.375, 84], [10.5, 88], [11.25, 81], [11.375, 85], [11.5, 88]].forEach(([tt, m]) => pluck(T + tt, m, 0.65, -0.2, { dec: 0.16, cut: 6500 }));
+    riser(T + 11.0, T + 12.0, 0.3);
+    for (let k = 0; k < 4; k++) clap(T + 11.5 + 0.125 * k + 0.0625, 0.45 + 0.1 * k, 0.15);
+    for (let k = 0; k < 8; k++) clap(T + 11.75 + 0.03125 * k, 0.35 + 0.07 * k, 0.12);
+    // ---- bar 7: THE CLIMAX - stabs on every beat, distorted 16ths, D minor with octaves, sub, crash
+    crash(T + 12.0, 0.4, 2.2);
+    sub(T + 12.0, 2.0, 26, 0.75, 12);
+    [[12.0, 1.35, 0.5], [12.5, 1.0, 0.3], [13.0, 1.15, 0.36], [13.5, 1.0, 0.3]].forEach(([tt, v, d]) => stab(T + tt, DMC.concat([38]), d, { vel: v, drive: 2.4, cut0: 9000, cut1: 1200, width: 1, wet: 0.35 }));
+    for (let s = 0; s < 32; s++) if (s % 4 !== 0) bass(T + 12.0 + s * 0.125, 0.1, ROOT[6] + (s % 4 === 2 ? 12 : 0) + (s >= 24 && s % 4 === 3 ? 3 : 0), { cut0: 3400, cut1: 520, q: 8, vel: 1.05 });
+    [[12.25, 86], [12.375, 89], [12.5, 93], [13.25, 86], [13.375, 89], [13.5, 91], [13.75, 93]].forEach(([tt, m]) => pluck(T + tt, m, 0.75, 0.15, { dec: 0.2, cut: 7500, wet: 0.35 }));
+    // ---- final half bar: IDENTITY - Bbmaj9#11, stutter into the merge, reverse swell into the loop
+    pad(T + 14.0, 0.98, BBM9, { vel: 0.07, cut: 3200, att: 0.01, rel: 0.05, wet: 0.5 });
+    stab(T + 14.0, BBM9, 0.42, { vel: 1.0, cut0: 8000, cut1: 1500, wet: 0.55 });
+    sub(T + 14.0, 0.98, 34, 0.55);
+    for (let k = 0; k < 4; k++) stab(T + 14.75 + k * 0.0625, BBM9.map((m) => m - 12 * (k > 1)), 0.04, { vel: 0.5 - k * 0.07, cut0: 3000, cut1: 2000, wet: 0.15 });
+    swell(T + 14.5, T + 15.0, 0.26);
+  }
+  for (let c = 0; c < NC; c++) compose(c * CYCLE);
+
+  const buf = await ctx.startRendering();
+  if (opts.verify) {   // is cycle 3 a sample-exact continuation of cycle 2 in the same way cycle 2 follows cycle 1?
+    const N = SR * CYCLE; let dHead = 0, dTail = 0;
+    for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c);
+      for (let i = 0; i < SR; i++) dHead = Math.max(dHead, Math.abs(d[2 * N + i] - d[N + i]));
+      for (let i = 1; i <= SR; i++) dTail = Math.max(dTail, Math.abs(d[3 * N - i] - d[2 * N - i])); }
+    return JSON.stringify({ maxDiffAfterSeam: dHead, maxDiffBeforeSeam: dTail });
+  }
+  // second cycle, peak-normalised to -1 dBFS, TPDF-dithered 16-bit PCM
+  const n = SR * CYCLE, L = buf.getChannelData(0).subarray(n, 2 * n), R = buf.getChannelData(1).subarray(n, 2 * n);
+  let peak = 0; for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(L[i]), Math.abs(R[i]));
+  const gain = Math.pow(10, -1 / 20) / (peak || 1);
+  const out = new DataView(new ArrayBuffer(44 + n * 4));
+  const wstr = (o, s) => { for (let i = 0; i < s.length; i++) out.setUint8(o + i, s.charCodeAt(i)); };
+  wstr(0, 'RIFF'); out.setUint32(4, 36 + n * 4, true); wstr(8, 'WAVE'); wstr(12, 'fmt ');
+  out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 2, true); out.setUint32(24, SR, true);
+  out.setUint32(28, SR * 4, true); out.setUint16(32, 4, true); out.setUint16(34, 16, true); wstr(36, 'data'); out.setUint32(40, n * 4, true);
+  const dr = mulberry32(5);
+  for (let i = 0; i < n; i++) for (let c = 0; c < 2; c++) {
+    const x = (c ? R[i] : L[i]) * gain * 32767 + (dr() - dr());
+    out.setInt16(44 + (i * 2 + c) * 2, Math.max(-32768, Math.min(32767, Math.round(x))), true);
+  }
+  window.__audioStats = { peakRaw: peak, gain };
+  const bytes = new Uint8Array(out.buffer); let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+
+/* ---- main.js ---- */
+/* =====================================================================
+   BOOT + PUBLIC API
+   window.seek(t)            render the frame at absolute time t (s). Deterministic, stateless.
+   window.captureFrame(t, offsets, weights) -> base64 RGB24 of a temporally supersampled frame
+   window.renderSoundtrack() -> base64 WAV (48 kHz stereo 16-bit)
+   ===================================================================== */
+async function init() {
+  await Text.init();
+  FIELDS.terr = buildTerrain();
+  TEX.terr = fieldTexture(FIELDS.terr, GX, GY);
+  const sig = await buildWordField('SIGNAL', 'IDB', 900, 2.86, 0.0);
+  FIELDS.sig = sig; TEX.sig = fieldTexture(sig.G, GX, GY);
+  const tit = await buildWordField('ISOLINE', 'IDB', 900, 2.62, 0.0);
+  FIELDS.tit = tit; TEX.tit = fieldTexture(tit.G, GX, GY);
+  FieldPlane.init(); Terraces.init(); Lines.init(); Fills.init();
+  if (typeof sceneInit === 'function') sceneInit();
+}
+
+// wrap only outside [0, 15] so that seek(15) is genuinely evaluated by the closing motion
+const wrapT = (t) => (t < 0 || t > DUR ? ((t % DUR) + DUR) % DUR : t);
+window.seek = (t) => { renderFrame(wrapT(t)); gl.finish(); return true; };
+
+let _acc = null, _px = null;
+window.captureFrame = (t, offsets = [0], weights = [1]) => {
+  const N = W * H;
+  if (!_acc) { _acc = new Float32Array(N * 3); _px = new Uint8Array(N * 4); }
+  _acc.fill(0);
+  let wsum = 0;
+  for (let k = 0; k < offsets.length; k++) {
+    renderFrame(wrapT(t + offsets[k]));
+    gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, _px);
+    const w = weights[k]; wsum += w;
+    for (let y = 0; y < H; y++) {           // flip: GL rows are bottom-up
+      const src = (H - 1 - y) * W * 4, dst = y * W * 3;
+      for (let x = 0; x < W; x++) {
+        const s = src + x * 4, d = dst + x * 3;
+        _acc[d] += _px[s] * w; _acc[d + 1] += _px[s + 1] * w; _acc[d + 2] += _px[s + 2] * w;
+      }
+    }
+  }
+  const out = new Uint8Array(N * 3), inv = 1 / wsum;
+  for (let i = 0; i < N * 3; i++) out[i] = Math.min(255, Math.round(_acc[i] * inv));
+  let s = '';
+  for (let i = 0; i < out.length; i += 0x8000) s += String.fromCharCode.apply(null, out.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+
+window.ready = init().then(() => { window.seek(0); window.__ready = true; return true; })
+  .catch((e) => { window.__error = String(e && e.stack || e); console.error(e); throw e; });
+
+// optional live preview: click to play with sound (the render path never uses this)
+document.addEventListener('click', async () => {
+  if (window.__playing || !window.renderSoundtrack) return;
+  window.__playing = true;
+  const ac = new AudioContext({ sampleRate: 48000 });
+  const b64 = await window.renderSoundtrack();
+  const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const buf = await ac.decodeAudioData(bin.buffer);
+  const src = ac.createBufferSource(); src.buffer = buf; src.loop = true; src.connect(ac.destination);
+  const t0 = ac.currentTime + 0.1; src.start(t0);
+  const loop = () => { const t = (ac.currentTime - t0); if (t >= 0) window.seek(t % DUR); requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+});
+
+</script>
+</body>
+</html>

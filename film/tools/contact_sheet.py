@@ -23,7 +23,7 @@ for k, (im, f) in enumerate(zip(ims, files)):
     t = float(m.group(1)) if m else 0.0
     beat = t * 2
     bar = int(beat // 4) + 1
-    label = f't = {t:06.3f}s   beat {beat:4.1f}   bar {bar if bar <= 7 else "7½"}'
+    label = f't = {t:06.3f}s   beat {beat:5.1f}   bar {bar}'
     d.text((x + 2, y + 6), label, fill=(235, 232, 225), font=font)
 sheet.save(out)
 print(out, sheet.size)

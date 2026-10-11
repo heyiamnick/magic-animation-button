@@ -9,7 +9,8 @@
 const Q = new URLSearchParams(location.search);
 const W = +(Q.get('w') || 1920), H = +(Q.get('h') || 1080);
 const PX = H / 1080;                       // design pixels -> device pixels
-const DUR = 15, BPM = 120, BEAT = 60 / BPM, SIX = BEAT / 4;
+const DUR = 75, BPM = 120, BEAT = 60 / BPM, SIX = BEAT / 4;
+window.DURATION = DUR;
 const MW = 16 / 9;                         // map half-width (world units); map half-height = 1
 const PLAN_FOV = 30 * Math.PI / 180;
 const PLAN_DIST = 1 / Math.tan(PLAN_FOV / 2);   // camera distance that frames 2u of height
@@ -58,13 +59,14 @@ function cubicBezier(x1, y1, x2, y2) {
 
 /* Keyframe track with cubic Hermite interpolation (Catmull-Rom tangents).
    keys: [[t, value|array, {m: tangent array, hold: bool}]]  period>0 => cyclic */
-function Track(keys, period = 0) {
+function Track(keys, period = 0, drift = null) {
   const K = keys.map(([t, v, o]) => ({ t, v: Array.isArray(v) ? v.slice() : [v], o: o || {} }));
   const n = K.length, dim = K[0].v.length;
+  // drift: per-cycle offset (e.g. yaw -360) so a continuous orbit can close the loop without unwinding
   const key = (i) => {
     if (!period) return K[Math.max(0, Math.min(n - 1, i))];
     const w = Math.floor(i / n), k = K[((i % n) + n) % n];
-    return { t: k.t + w * period, v: k.v, o: k.o };
+    return { t: k.t + w * period, v: drift && w ? k.v.map((x, d) => x + w * drift[d]) : k.v, o: k.o };
   };
   const tan = (i) => {
     const k = key(i);
@@ -91,6 +93,7 @@ function Track(keys, period = 0) {
     i = n - 1;
     for (let j = 0; j < n; j++) if (K[j].t > t) { i = j - 1; break; }
     const a = key(i), b = key(i + 1);
+    if (period && drift) { /* evaluation happens in cycle 0, so keys from cycle 0/1 already carry the drift */ }
     const h = b.t - a.t, s = (t - a.t) / h, s2 = s * s, s3 = s2 * s;
     const h00 = 2 * s3 - 3 * s2 + 1, h10 = s3 - 2 * s2 + s, h01 = -2 * s3 + 3 * s2, h11 = s3 - s2;
     const ma = tanAt(i), mb = tanAt(i + 1);

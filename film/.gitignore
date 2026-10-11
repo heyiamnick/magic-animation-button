@@ -3,3 +3,4 @@ build/*.mp4
 build/*.log
 build/*.wav
 build/*.rgb
+__pycache__/

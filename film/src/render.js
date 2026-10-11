@@ -7,16 +7,22 @@ const FIELD_VS = `#version 300 es
 in vec2 aPos;
 uniform mat4 uVP;
 uniform vec4 uWhipFrame;   // c.xy, dir.xy  (plan coords)
-uniform vec4 uPulse[4];    // pos, ampV, ampY, sigma
+uniform vec4 uPulse[6];    // pos, ampV, ampY, sigma
 uniform vec4 uSheet;       // amp, wavelength, phase, along-decay
+uniform sampler2D uSigV; uniform vec4 uRelief; uniform vec4 uMapRectV;   // relief: height, front x, front width, 0
 out vec3 vW;
 void main(){
   vec2 q = vec2(aPos.x, -aPos.y);
   float s = dot(q - uWhipFrame.xy, uWhipFrame.zw);
   float n = dot(q - uWhipFrame.xy, vec2(-uWhipFrame.w, uWhipFrame.z));
   float y = 0.;
-  for (int i = 0; i < 4; i++) { float x = (s - uPulse[i].x) / uPulse[i].w; y += uPulse[i].z * exp(-x * x) * exp(-n * n * 0.35); }
+  for (int i = 0; i < 6; i++) { float x = (s - uPulse[i].x) / uPulse[i].w; y += uPulse[i].z * exp(-x * x) * exp(-n * n * 0.35); }
   y += uSheet.x * sin(6.2831853 * s / uSheet.y - uSheet.z) * exp(-abs(s) * uSheet.w);
+  if (uRelief.x > 0.) {
+    float sd = textureLod(uSigV, (q - uMapRectV.xy) / uMapRectV.zw, 0.).r;
+    float rise = clamp((uRelief.y - q.x) / uRelief.z, 0., 1.);
+    y += uRelief.x * smoothstep(.014, -.014, sd) * rise * rise * (3. - 2. * rise);
+  }
   vW = vec3(aPos.x, y, aPos.y);
   gl_Position = uVP * vec4(vW, 1.);
 }`;
@@ -28,7 +34,7 @@ out vec4 oC;
 uniform vec3 uBg;
 uniform vec4 uA0, uA1, uA2, uA3, uA4, uB0, uB1, uB2, uB3, uB4;
 // X0: c.xy dir.xy | X1: W m0 f mode | X2: sp invS v0 hwPx | X3: rgb alpha | X4: hwWorld gapPx idxBoost idxEvery
-uniform vec4 uPulse[4]; uniform vec4 uSag; uniform vec4 uWhipFrame;
+uniform vec4 uPulse[6]; uniform vec4 uSag; uniform vec4 uWhipFrame;
 uniform vec4 uWeave;              // dir.xy, front, mode (0 A-top, 1 parity behind front, 2 B-top)
 uniform sampler2D uTerr; uniform vec4 uMapRect; uniform float uK; uniform float uKoff;
 uniform sampler2D uSig; uniform vec4 uSigP; uniform vec4 uSigQ;
@@ -42,7 +48,7 @@ uniform vec3 uEye; uniform vec2 uFog;
 float cover(float d, float w) { return max(0., min(d + w * .5, .5) - max(d - w * .5, -.5)); }
 float whipD(float s) {
   float d = 0.;
-  for (int i = 0; i < 4; i++) { float x = (s - uPulse[i].x) / uPulse[i].w; d += uPulse[i].y * exp(-x * x); }
+  for (int i = 0; i < 6; i++) { float x = (s - uPulse[i].x) / uPulse[i].w; d += uPulse[i].y * exp(-x * x); }
   float sl = s / uSag.y; d -= uSag.x * max(0., 1. - sl * sl);
   return d;
 }
@@ -141,23 +147,37 @@ void main() {
 }`;
 
 const FieldPlane = (() => {
-  let prog, vao, count;
-  function init() {
-    prog = Program(FIELD_VS, FIELD_FS);
-    const N = 240, S = 7;                       // grid over [-S,S]^2
-    const v = new Float32Array((N + 1) * (N + 1) * 2);
-    let k = 0;
-    for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) { v[k++] = -S + (2 * S * i) / N; v[k++] = -S + (2 * S * j) / N; }
-    const idx = new Uint32Array(N * N * 6); k = 0;
-    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-      const a = j * (N + 1) + i; idx[k++] = a; idx[k++] = a + 1; idx[k++] = a + N + 1; idx[k++] = a + 1; idx[k++] = a + N + 2; idx[k++] = a + N + 1;
+  let prog, vao, count, vaoD, countD;
+  // grid mesh over [x0,x1]x[z0,z1] with N x M cells; hole: skip cells fully inside [hx0,hx1]x[hz0,hz1]
+  function gridMesh(x0, x1, z0, z1, N, M, hole) {
+    const v = new Float32Array((N + 1) * (M + 1) * 2); let k = 0;
+    for (let j = 0; j <= M; j++) for (let i = 0; i <= N; i++) { v[k++] = x0 + ((x1 - x0) * i) / N; v[k++] = z0 + ((z1 - z0) * j) / M; }
+    const idx = []; 
+    for (let j = 0; j < M; j++) for (let i = 0; i < N; i++) {
+      if (hole) { const cx0 = x0 + ((x1 - x0) * i) / N, cx1 = x0 + ((x1 - x0) * (i + 1)) / N, cz0 = z0 + ((z1 - z0) * j) / M, cz1 = z0 + ((z1 - z0) * (j + 1)) / M;
+        if (cx0 >= hole[0] && cx1 <= hole[1] && cz0 >= hole[2] && cz1 <= hole[3]) continue; }
+      const a = j * (N + 1) + i; idx.push(a, a + 1, a + N + 1, a + 1, a + N + 2, a + N + 1);
     }
-    count = idx.length;
-    vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+    return { v, idx: new Uint32Array(idx) };
+  }
+  function makeVao(parts) {
+    let nv = 0; for (const p of parts) nv += p.v.length / 2;
+    const v = new Float32Array(nv * 2), idx = []; let off = 0, vo = 0;
+    for (const p of parts) { v.set(p.v, vo * 2); for (const i of p.idx) idx.push(i + vo); vo += p.v.length / 2; }
+    const ia = new Uint32Array(idx);
+    const va = gl.createVertexArray(); gl.bindVertexArray(va);
     const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, v, gl.STATIC_DRAW);
     const l = prog.a('aPos'); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 2, gl.FLOAT, false, 0, 0);
-    const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+    const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, ia, gl.STATIC_DRAW);
     gl.bindVertexArray(null);
+    return [va, ia.length];
+  }
+  function init() {
+    prog = Program(FIELD_VS, FIELD_FS);
+    const S = 7, H = [-2.08, 2.08, -1.2, 1.2];
+    [vao, count] = makeVao([gridMesh(-S, S, -S, S, 240, 240, null)]);
+    // relief: a dense core (≈3.5 px cells) for crisp letter walls, plus the coarse plane around it
+    [vaoD, countD] = makeVao([gridMesh(H[0], H[1], H[2], H[3], 640, 370, null), gridMesh(-S, S, -S, S, 240, 240, H)]);
   }
   function fam(pre, F) {
     const u = prog.u;
@@ -173,8 +193,8 @@ const FieldPlane = (() => {
     gl.uniformMatrix4fv(u('uVP'), false, cam.vp);
     gl.uniform3fv(u('uBg'), S.bg);
     fam('uA', S.A); fam('uB', S.B);
-    const P = new Float32Array(16);
-    for (let i = 0; i < 4; i++) { const p = S.pulses[i] || [0, 0, 0, 1]; P.set(p, i * 4); }
+    const P = new Float32Array(24);
+    for (let i = 0; i < 6; i++) { const p = S.pulses[i] || [0, 0, 0, 1]; P.set(p, i * 4); }
     gl.uniform4fv(u('uPulse'), P);
     gl.uniform4f(u('uSag'), S.sag[0], S.sag[1], 0, 0);
     gl.uniform4f(u('uWhipFrame'), 0, 0, 1, 0);
@@ -190,8 +210,11 @@ const FieldPlane = (() => {
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex.terr); gl.uniform1i(u('uTerr'), 0);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, tex.sig); gl.uniform1i(u('uSig'), 1);
     gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, tex.tit); gl.uniform1i(u('uTit'), 2);
-    gl.bindVertexArray(vao);
-    gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_INT, 0);
+    const rel = S.relief || [0, 0, 1, 0];
+    gl.uniform4fv(u('uRelief'), rel); gl.uniform4fv(u('uMapRectV'), MAPRECT);
+    gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, tex.sig); gl.uniform1i(u('uSigV'), 3);
+    if (rel[0] > 0) { gl.bindVertexArray(vaoD); gl.drawElements(gl.TRIANGLES, countD, gl.UNSIGNED_INT, 0); }
+    else { gl.bindVertexArray(vao); gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_INT, 0); }
     gl.bindVertexArray(null);
   }
   return { init, draw };
@@ -372,14 +395,15 @@ const LINE_VS = `#version 300 es
 in vec2 aC;
 in vec3 aP0; in vec3 aP1; in vec4 aCol; in vec2 aWD;   // width px, dash-phase(unused<0)
 uniform mat4 uVP; uniform vec2 uRes; uniform float uBias;
-out float vD; out vec4 vCol; flat out float vWd;
+out vec2 vDW; out vec4 vCol; flat out float vWd;   // vDW = (screen distance * w, w): divided per fragment -> screen-linear
 void main(){
   vec4 c0 = uVP * vec4(aP0, 1.), c1 = uVP * vec4(aP1, 1.);
-  // clip against near plane in clip space
-  float e = 1e-4;
-  if (c0.w < e && c1.w < e) { gl_Position = vec4(2., 2., 2., 1.); vD = 0.; vCol = vec4(0.); vWd = 0.; return; }
-  if (c0.w < e) c0 = mix(c0, c1, (e - c0.w) / (c1.w - c0.w));
-  if (c1.w < e) c1 = mix(c1, c0, (e - c1.w) / (c0.w - c1.w));
+  // clip exactly against the near plane (z + w >= 0 in clip space). Clipping at a tiny w instead leaves vertices with
+  // screen coordinates ~1e6 px, and the rasterizer then drops segments that pass behind the camera.
+  float e = 1e-6, P0 = c0.z + c0.w, P1 = c1.z + c1.w;
+  if (P0 < e && P1 < e) { gl_Position = vec4(2., 2., 2., 1.); vDW = vec2(0., 1.); vCol = vec4(0.); vWd = 0.; return; }
+  if (P0 < e) c0 = mix(c0, c1, (e - P0) / (P1 - P0));
+  if (P1 < e) c1 = mix(c1, c0, (e - P1) / (P0 - P1));
   vec2 s0 = c0.xy / c0.w * .5 * uRes, s1 = c1.xy / c1.w * .5 * uRes;
   vec2 d = s1 - s0; float L = length(d); d = L > 1e-5 ? d / L : vec2(1., 0.);
   vec2 n = vec2(-d.y, d.x);
@@ -388,14 +412,14 @@ void main(){
   vec2 off = n * aC.y * hw + d * (aC.x * 2. - 1.) * min(hw, aWD.x * .5 + .5);
   c.xy += off / (.5 * uRes) * c.w;
   c.z -= uBias * c.w;
-  gl_Position = c; vD = aC.y * hw; vCol = aCol; vWd = aWD.x;
+  gl_Position = c; vDW = vec2(aC.y * hw * c.w, c.w); vCol = aCol; vWd = aWD.x;
 }`;
 const LINE_FS = `#version 300 es
 precision highp float;
-in float vD; in vec4 vCol; flat in float vWd;
+in vec2 vDW; in vec4 vCol; flat in float vWd;
 out vec4 oC;
 float cover(float d, float w) { return max(0., min(d + w * .5, .5) - max(d - w * .5, -.5)); }
-void main(){ float a = cover(abs(vD), vWd) * vCol.a; if (a < .003) discard; oC = vec4(vCol.rgb, a); }`;
+void main(){ float a = cover(abs(vDW.x / vDW.y), vWd) * vCol.a; if (a < .003) discard; oC = vec4(vCol.rgb, a); }`;
 
 const Lines = (() => {
   let prog, vao, buf, cbuf;

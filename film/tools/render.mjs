@@ -1,11 +1,11 @@
 // ISOLINE render tool (Playwright + FFmpeg)
 //   node tools/render.mjs stills  --times 0,0.5,1 [--w 960 --h 540] --out dir
-//   node tools/render.mjs preview --w 960 --h 540 --fps 30 [--from 0 --to 15] --out file.mp4 [--audio soundtrack.wav]
-//   node tools/render.mjs audio   --out soundtrack.wav
-//   node tools/render.mjs final   --workers 3 --out final.mp4 --audio soundtrack.wav
+//   node tools/render.mjs preview --w 960 --h 540 --fps 30 [--from 0 --to 75] --out file.mp4 [--audio soundtrack.wav]
+//   node tools/render.mjs audio   --out soundtrack.wav   [--verify: render 3 cycles, report the seam]
+//   node tools/render.mjs final   --splits 900,1800,... --parallel 4 --out final.mp4 --audio soundtrack.wav [--target-mb 95 | --crf 17]
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { spawn } from 'node:child_process';
-import { writeFileSync, mkdirSync, createWriteStream, existsSync, rmSync, statSync, openSync, readSync, closeSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, statSync, renameSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
@@ -13,7 +13,7 @@ import { deflateSync } from 'node:zlib';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const args = Object.fromEntries(process.argv.slice(3).reduce((acc, a, i, arr) => { if (a.startsWith('--')) acc.push([a.slice(2), arr[i + 1] && !arr[i + 1].startsWith('--') ? arr[i + 1] : true]); return acc; }, []));
 const cmd = process.argv[2];
-const FPS = 60, DUR = 15;
+const FPS = 60, DUR = 75;
 
 async function openPage(w, h) {
   const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-gpu-vsync'] });
@@ -79,49 +79,72 @@ if (cmd === 'stills') {
 } else if (cmd === 'audio') {
   const out = resolve(args.out || 'soundtrack.wav');
   const { browser, page } = await openPage(320, 180);
-  const b64 = await page.evaluate(() => window.renderSoundtrack());
-  writeFileSync(out, Buffer.from(b64, 'base64'));
-  console.log('wrote', out);
+  if (args.verify) {   // three cycles: is the 3rd a sample-exact repeat of the 2nd across the seam?
+    console.log(await page.evaluate(() => window.renderSoundtrack({ verify: true })));
+  } else {
+    const b64 = await page.evaluate(() => window.renderSoundtrack());
+    writeFileSync(out, Buffer.from(b64, 'base64'));
+    console.log('wrote', out);
+  }
   await browser.close();
 } else if (cmd === 'chunk') {
-  // worker: render frames [a, b) at full res with subframes into a raw RGB file
+  // worker: render frames [a, b) at full res with subframes, encoded losslessly (FFV1) as it goes
   const a = +args.a, b = +args.b, w = +(args.w || 1920), h = +(args.h || 1080), out = resolve(args.out);
   const { browser, page } = await openPage(w, h);
-  const fd = createWriteStream(out);
+  const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', `${w}x${h}`, '-r', String(FPS), '-i', '-',
+    '-c:v', 'ffv1', '-level', '3', '-g', '1', '-slices', '4', '-threads', '2', out + '.part.mkv'], { stdio: ['pipe', 'ignore', 'inherit'] });
   const t0 = Date.now();
   for (let f = a; f < b; f++) {
     const rgb = await grab(page, f / FPS, true);
-    if (!fd.write(rgb)) await new Promise((r) => fd.once('drain', r));
+    if (!ff.stdin.write(rgb)) await new Promise((r) => ff.stdin.once('drain', r));
     if ((f - a) % 20 === 0) process.stdout.write(`[${a}-${b}] frame ${f} ${((Date.now() - t0) / (f - a + 1)).toFixed(0)}ms/f\n`);
   }
-  await new Promise((r) => fd.end(r));
+  ff.stdin.end();
+  const code = await new Promise((r) => ff.on('close', r));
   await browser.close();
+  if (code !== 0) throw new Error('ffmpeg failed for chunk ' + out);
+  renameSync(out + '.part.mkv', out);
+  writeFileSync(out + '.done', JSON.stringify({ a, b, w, h, fps: FPS }));
 } else if (cmd === 'final') {
-  const workers = +(args.workers || 3), w = 1920, h = 1080, frames = FPS * DUR;
+  // --workers N | --splits a,b,c   chunk boundaries (balance cheap 2D frames against expensive 3D frames)
+  // --audio soundtrack.wav  --out final.mp4
+  // --target-mb M : two-pass encode sized to M megabytes (10^6 bytes) incl. audio; otherwise CRF (--crf, default 17)
+  const workers = +(args.workers || 3), w = 1920, h = 1080, frames = +(args.frames || FPS * DUR), dur = frames / FPS;
   const tmp = resolve(args.tmp || join(ROOT, 'build/chunks')); mkdirSync(tmp, { recursive: true });
-  // --splits a,b,c : explicit chunk boundaries (balance cheap 2D frames against expensive 3D frames)
   const cuts = args.splits ? [0, ...String(args.splits).split(',').map(Number), frames] : Array.from({ length: workers + 1 }, (_, k) => Math.min(frames, k * Math.ceil(frames / workers)));
-  const nChunks = cuts.length - 1, jobs = [];
+  const nChunks = cuts.length - 1, queue = [], files = [];
   for (let k = 0; k < nChunks; k++) {
-    const a = cuts[k], b = cuts[k + 1], f = join(tmp, `chunk${k}.rgb`);
-    if (existsSync(f) && statSync(f).size === (b - a) * w * h * 3 && !args.force) { console.log('reuse', f); jobs.push(Promise.resolve()); continue; }
-    jobs.push(new Promise((res, rej) => { const p = spawn(process.execPath, [fileURLToPath(import.meta.url), 'chunk', '--a', a, '--b', b, '--out', f], { stdio: 'inherit' }); p.on('close', (c) => (c === 0 ? res() : rej(new Error('worker ' + k + ' failed')))); }));
+    const a = cuts[k], b = cuts[k + 1], f = join(tmp, `chunk_${a}_${b}.mkv`); files.push(f);
+    if (existsSync(f + '.done') && !args.force) console.log('reuse', f); else queue.push({ a, b, f });
   }
-  await Promise.all(jobs);
+  const runChunk = ({ a, b, f }) => new Promise((res, rej) => {
+    const p = spawn(process.execPath, [fileURLToPath(import.meta.url), 'chunk', '--a', a, '--b', b, '--out', f], { stdio: 'inherit' });
+    p.on('close', (c) => (c === 0 ? res() : rej(new Error(`worker ${a}-${b} failed`))));
+  });
+  // worker pool: at most --parallel chunks render at once, longest-first order is up to the caller's splits
+  const limit = Math.max(1, +(args.parallel || workers));
+  await Promise.all(Array.from({ length: Math.min(limit, queue.length) }, async () => { while (queue.length) await runChunk(queue.shift()); }));
+  const list = join(tmp, 'list.txt');
+  writeFileSync(list, files.map((f) => `file '${f}'`).join('\n') + '\n');
   const out = resolve(args.out || join(ROOT, 'final.mp4'));
-  const ff = ['-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', `${w}x${h}`, '-r', String(FPS), '-i', '-'];
-  if (args.audio) ff.push('-i', resolve(args.audio), '-c:a', 'aac', '-b:a', '320k', '-ar', '48000');
-  ff.push('-c:v', 'libx264', '-preset', 'slow', '-crf', String(args.crf || 17), '-tune', 'animation', '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-level', '5.1',
-    '-x264-params', 'keyint=60:min-keyint=60', '-movflags', '+faststart', '-frames:v', String(frames), '-t', String(DUR), out);
-  const p = spawn('ffmpeg', ff, { stdio: ['pipe', 'ignore', 'inherit'] });
-  for (let k = 0; k < nChunks; k++) {
-    const f = join(tmp, `chunk${k}.rgb`), fd = openSync(f, 'r'), size = statSync(f).size, bs = w * h * 3;
-    const buf = Buffer.alloc(bs);
-    for (let off = 0; off < size; off += bs) { readSync(fd, buf, 0, bs, off); if (!p.stdin.write(Buffer.from(buf))) await new Promise((r) => p.stdin.once('drain', r)); }
-    closeSync(fd);
+  const vin = ['-f', 'concat', '-safe', '0', '-i', list];
+  const ain = args.audio ? ['-i', resolve(args.audio)] : [];
+  const vopts = ['-c:v', 'libx264', '-preset', 'slow', '-tune', 'animation', '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-level', '4.2',
+    '-g', '30', '-keyint_min', '30', '-bf', '2', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv',
+    '-vf', 'scale=out_color_matrix=bt709:out_range=tv,format=yuv420p', '-r', String(FPS), '-frames:v', String(frames)];
+  const aopts = args.audio ? ['-map', '0:v:0', '-map', '1:a:0', '-c:a', 'aac', '-b:a', '384k', '-ar', '48000', '-ac', '2'] : [];
+  const run = (argv) => new Promise((res, rej) => { const p = spawn('ffmpeg', argv, { stdio: ['ignore', 'ignore', 'inherit'] }); p.on('close', (c) => (c === 0 ? res() : rej(new Error('ffmpeg ' + c)))); });
+  if (args['target-mb']) {
+    const totalBits = +args['target-mb'] * 1e6 * 8 * 0.985;            // 1.5% container headroom
+    const vk = Math.floor((totalBits / dur - (args.audio ? 384e3 : 0)) / 1000);
+    const passlog = join(tmp, 'x264pass');
+    console.log(`two-pass target ${args['target-mb']} MB -> video ${vk} kb/s`);
+    await run(['-y', '-loglevel', 'error', ...vin, ...vopts, '-b:v', vk + 'k', '-maxrate', Math.round(vk * 1.6) + 'k', '-bufsize', Math.round(vk * 2) + 'k', '-pass', '1', '-passlogfile', passlog, '-an', '-f', 'null', '/dev/null']);
+    await run(['-y', '-loglevel', 'error', ...vin, ...ain, ...vopts, '-b:v', vk + 'k', '-maxrate', Math.round(vk * 1.6) + 'k', '-bufsize', Math.round(vk * 2) + 'k', '-pass', '2', '-passlogfile', passlog, ...aopts, '-movflags', '+faststart', '-t', String(dur), out]);
+  } else {
+    await run(['-y', '-loglevel', 'error', ...vin, ...ain, ...vopts, '-crf', String(args.crf || 17), ...aopts, '-movflags', '+faststart', '-t', String(dur), out]);
   }
-  p.stdin.end(); await new Promise((r) => p.on('close', r));
-  console.log('wrote', out);
+  console.log('wrote', out, (statSync(out).size / 1e6).toFixed(1), 'MB');
 } else {
   console.log('unknown command'); process.exit(1);
 }

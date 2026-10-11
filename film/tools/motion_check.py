@@ -29,7 +29,7 @@ if cmd == 'diff':
     seam = np.abs(F[0] - F[-1]).mean()
     print(f'loop seam step (last->first) {seam:.2f}; neighbours: first {d[0]:.2f}, last {d[-1]:.2f}')
     # coarse activity timeline (per beat)
-    per_beat = [d[int(b * fps / 2):int((b + 1) * fps / 2)].mean() for b in range(30)]
+    per_beat = [d[int(b * fps / 2):int((b + 1) * fps / 2)].mean() for b in range(int(len(F) / fps * 2))]
     print('activity per beat:', ' '.join(f'{v:.0f}' for v in per_beat))
 elif cmd == 'strip':
     out, t0, n = sys.argv[3], float(sys.argv[4]), int(sys.argv[5])

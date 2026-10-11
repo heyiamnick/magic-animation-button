@@ -16,8 +16,11 @@ function gridSample(G, x, y) {   // bilinear, matches GL LINEAR filtering on tex
 }
 
 /* ---- terrain: a designed island massif, domain-warped ridged noise + sculpted features ---- */
-function buildTerrain() {
-  const n1 = perlin2(1907), n2 = perlin2(4211), n3 = perlin2(733), n4 = perlin2(91);
+const TERRAIN_A = [[-0.72, 0.10, 0.66, 0.40, 0.70, 0.30], [-0.05, -0.12, 1.05, 0.15, 0.30, -0.40], [0.88, 0.20, 0.40, 0.33, 0.55, 0.90], [0.40, -0.48, 0.30, 0.20, 0.22, 0.20], [0.15, 0.30, 0.30, 0.22, -0.16, 0.0]];
+// the same island after a tectonic shift: the massif slides east and folds, a new ridge rises in the west
+const TERRAIN_B = [[-0.22, 0.18, 0.58, 0.36, 0.72, -0.25], [-0.95, -0.22, 0.55, 0.16, 0.42, 0.55], [1.02, -0.10, 0.36, 0.40, 0.50, 0.35], [0.45, 0.45, 0.34, 0.20, 0.30, -0.6], [-0.55, 0.42, 0.28, 0.20, -0.14, 0.0]];
+function buildTerrain(F = TERRAIN_A, warpSeed = 1907) {
+  const n1 = perlin2(warpSeed), n2 = perlin2(4211), n3 = perlin2(733), n4 = perlin2(91);
   const raw = new Float32Array(GX * GY);
   const g = (x, y, cx, cy, sx, sy, a, rot = 0) => {
     const c = Math.cos(rot), s = Math.sin(rot), dx = x - cx, dy = y - cy;
@@ -33,11 +36,7 @@ function buildTerrain() {
     let f = 0, amp = 0.5, fr = 1.15;
     for (let o = 0; o < 3; o++) { const r = 1 - Math.abs(n2(wx * fr + o * 17.1, wy * fr - o * 9.3) * 1.3); f += amp * r * r * r; amp *= 0.45; fr *= 2.1; }
     let h = 0.30 * f;
-    h += g(wx, wy, -0.72, 0.10, 0.66, 0.40, 0.70, 0.30);   // west massif
-    h += g(wx, wy, -0.05, -0.12, 1.05, 0.15, 0.30, -0.40); // diagonal ridge
-    h += g(wx, wy, 0.88, 0.20, 0.40, 0.33, 0.55, 0.90);    // east peak
-    h += g(wx, wy, 0.40, -0.48, 0.30, 0.20, 0.22, 0.20);   // south knoll
-    h -= g(wx, wy, 0.15, 0.30, 0.30, 0.22, 0.16, 0.0);     // basin
+    for (const p of F) h += g(wx, wy, p[0], p[1], p[2], p[3], p[4], p[5]);   // sculpted massifs, ridges, basins
     h += 0.05 * n3(wx * 1.8, wy * 1.8);
     // organic coastline: warped ellipse, exactly flat beyond it
     const ex = x / (MW * 0.86), ey = y / 0.84;
@@ -107,6 +106,7 @@ function Isobands() {
   const verts = new FBuf(1 << 20), segs = new FBuf(1 << 18), runs = new FBuf(1 << 16);
   const P = new Float64Array(48), Q2 = new Float64Array(48);   // scratch polygons (x,y,g)*n
   function emitTri(ax, ay, bx, by, cx, cy, lv, ga, gb, gc) {
+    if (SKIP0 && lv === 0) return;
     verts.need(24); const a = verts.a; let n = verts.n;
     a[n++] = ax; a[n++] = -ay; a[n++] = lv; a[n++] = lv; a[n++] = 0; a[n++] = 0; a[n++] = 0; a[n++] = ga;
     a[n++] = bx; a[n++] = -by; a[n++] = lv; a[n++] = lv; a[n++] = 0; a[n++] = 0; a[n++] = 0; a[n++] = gb;
@@ -193,18 +193,25 @@ function Isobands() {
       a[i + 5] = v[0] / l; a[i + 6] = v[1] / l;
     }
   }
-  /* G: field in level units on the shared grid. sub: grid stride (1 = full res). */
-  function build(G, L, sub = 1) {
-    verts.reset(); segs.reset(); runs.reset();
-    const nx = Math.floor((GX - 1) / sub) + 1, ny = Math.floor((GY - 1) / sub) + 1;
-    const X = (i) => -MW + (i * sub + 0.5) * DX, Y = (j) => -1 + (j * sub + 0.5) * DY;
-    const val = (i, j) => G[(j * sub) * GX + i * sub] + 1e-4;
+  /* G: field in level units. sub: grid stride (1 = full res).
+     grid (optional): {w, h, x0, y0, dx, dy} for fields other than the map grid; skip0: omit band 0 (glyph solids) */
+  let SKIP0 = false;
+  function build(G, L, sub = 1, grid = null, skip0 = false) {
+    verts.reset(); segs.reset(); runs.reset(); SKIP0 = skip0;
+    const gw = grid ? grid.w : GX, gh = grid ? grid.h : GY;
+    const gx0 = grid ? grid.x0 : -MW + 0.5 * DX, gy0 = grid ? grid.y0 : -1 + 0.5 * DY;
+    const gdx = grid ? grid.dx : DX, gdy = grid ? grid.dy : DY;
+    const nx = Math.floor((gw - 1) / sub) + 1, ny = Math.floor((gh - 1) / sub) + 1;
+    const X = (i) => gx0 + i * sub * gdx, Y = (j) => gy0 + j * sub * gdy;
+    const val = (i, j) => G[(j * sub) * gw + i * sub] + 1e-4;
+    const DXr = gdx;
     for (let j = 0; j < ny - 1; j++) {
       let runStart = -1, runLv = -1;
       const y0 = Y(j), y1 = Y(j + 1);
       const flush = (iEnd) => {
         if (runStart >= 0) {
-          const e = 0.35 * DX, xa = X(runStart) - e, xb = X(iEnd) + e, ya = y0 - e, yb = y1 + e, gm = runLv + 0.5, lv = runLv;
+          if (SKIP0 && runLv === 0) { runStart = -1; runLv = -1; return; }
+          const e = 0.35 * DXr, xa = X(runStart) - e, xb = X(iEnd) + e, ya = y0 - e, yb = y1 + e, gm = runLv + 0.5, lv = runLv;
           runs.need(48); const a = runs.a; let n = runs.n;
           for (const [x, y] of [[xa, ya], [xb, ya], [xb, yb], [xa, ya], [xb, yb], [xa, yb]]) { a[n++] = x; a[n++] = -y; a[n++] = lv; a[n++] = lv; a[n++] = 0; a[n++] = 0; a[n++] = 0; a[n++] = gm; }
           runs.n = n;

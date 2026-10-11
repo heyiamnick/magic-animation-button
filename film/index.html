@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ISOLINE — Thread → Signal → Terrain → System</title>
+<title>ISOLINE — Thread → Signal → Terrain → System → Network</title>
 <style>html,body{margin:0;height:100%;background:#0A0A0B;overflow:hidden}canvas{display:block;position:absolute;left:0;top:0}</style>
 </head>
 <body>
@@ -25,7 +25,8 @@ window.FONT_DATA={display:"d09GRk9UVE8AAB98AAwAAAAAQQAABAAAAAAAAAAAAAAAAAAAAAAAA
 const Q = new URLSearchParams(location.search);
 const W = +(Q.get('w') || 1920), H = +(Q.get('h') || 1080);
 const PX = H / 1080;                       // design pixels -> device pixels
-const DUR = 15, BPM = 120, BEAT = 60 / BPM, SIX = BEAT / 4;
+const DUR = 75, BPM = 120, BEAT = 60 / BPM, SIX = BEAT / 4;
+window.DURATION = DUR;
 const MW = 16 / 9;                         // map half-width (world units); map half-height = 1
 const PLAN_FOV = 30 * Math.PI / 180;
 const PLAN_DIST = 1 / Math.tan(PLAN_FOV / 2);   // camera distance that frames 2u of height
@@ -74,13 +75,14 @@ function cubicBezier(x1, y1, x2, y2) {
 
 /* Keyframe track with cubic Hermite interpolation (Catmull-Rom tangents).
    keys: [[t, value|array, {m: tangent array, hold: bool}]]  period>0 => cyclic */
-function Track(keys, period = 0) {
+function Track(keys, period = 0, drift = null) {
   const K = keys.map(([t, v, o]) => ({ t, v: Array.isArray(v) ? v.slice() : [v], o: o || {} }));
   const n = K.length, dim = K[0].v.length;
+  // drift: per-cycle offset (e.g. yaw -360) so a continuous orbit can close the loop without unwinding
   const key = (i) => {
     if (!period) return K[Math.max(0, Math.min(n - 1, i))];
     const w = Math.floor(i / n), k = K[((i % n) + n) % n];
-    return { t: k.t + w * period, v: k.v, o: k.o };
+    return { t: k.t + w * period, v: drift && w ? k.v.map((x, d) => x + w * drift[d]) : k.v, o: k.o };
   };
   const tan = (i) => {
     const k = key(i);
@@ -107,6 +109,7 @@ function Track(keys, period = 0) {
     i = n - 1;
     for (let j = 0; j < n; j++) if (K[j].t > t) { i = j - 1; break; }
     const a = key(i), b = key(i + 1);
+    if (period && drift) { /* evaluation happens in cycle 0, so keys from cycle 0/1 already carry the drift */ }
     const h = b.t - a.t, s = (t - a.t) / h, s2 = s * s, s3 = s2 * s;
     const h00 = 2 * s3 - 3 * s2 + 1, h10 = s3 - 2 * s2 + s, h01 = -2 * s3 + 3 * s2, h11 = s3 - s2;
     const ma = tanAt(i), mb = tanAt(i + 1);
@@ -302,8 +305,11 @@ function gridSample(G, x, y) {   // bilinear, matches GL LINEAR filtering on tex
 }
 
 /* ---- terrain: a designed island massif, domain-warped ridged noise + sculpted features ---- */
-function buildTerrain() {
-  const n1 = perlin2(1907), n2 = perlin2(4211), n3 = perlin2(733), n4 = perlin2(91);
+const TERRAIN_A = [[-0.72, 0.10, 0.66, 0.40, 0.70, 0.30], [-0.05, -0.12, 1.05, 0.15, 0.30, -0.40], [0.88, 0.20, 0.40, 0.33, 0.55, 0.90], [0.40, -0.48, 0.30, 0.20, 0.22, 0.20], [0.15, 0.30, 0.30, 0.22, -0.16, 0.0]];
+// the same island after a tectonic shift: the massif slides east and folds, a new ridge rises in the west
+const TERRAIN_B = [[-0.22, 0.18, 0.58, 0.36, 0.72, -0.25], [-0.95, -0.22, 0.55, 0.16, 0.42, 0.55], [1.02, -0.10, 0.36, 0.40, 0.50, 0.35], [0.45, 0.45, 0.34, 0.20, 0.30, -0.6], [-0.55, 0.42, 0.28, 0.20, -0.14, 0.0]];
+function buildTerrain(F = TERRAIN_A, warpSeed = 1907) {
+  const n1 = perlin2(warpSeed), n2 = perlin2(4211), n3 = perlin2(733), n4 = perlin2(91);
   const raw = new Float32Array(GX * GY);
   const g = (x, y, cx, cy, sx, sy, a, rot = 0) => {
     const c = Math.cos(rot), s = Math.sin(rot), dx = x - cx, dy = y - cy;
@@ -319,11 +325,7 @@ function buildTerrain() {
     let f = 0, amp = 0.5, fr = 1.15;
     for (let o = 0; o < 3; o++) { const r = 1 - Math.abs(n2(wx * fr + o * 17.1, wy * fr - o * 9.3) * 1.3); f += amp * r * r * r; amp *= 0.45; fr *= 2.1; }
     let h = 0.30 * f;
-    h += g(wx, wy, -0.72, 0.10, 0.66, 0.40, 0.70, 0.30);   // west massif
-    h += g(wx, wy, -0.05, -0.12, 1.05, 0.15, 0.30, -0.40); // diagonal ridge
-    h += g(wx, wy, 0.88, 0.20, 0.40, 0.33, 0.55, 0.90);    // east peak
-    h += g(wx, wy, 0.40, -0.48, 0.30, 0.20, 0.22, 0.20);   // south knoll
-    h -= g(wx, wy, 0.15, 0.30, 0.30, 0.22, 0.16, 0.0);     // basin
+    for (const p of F) h += g(wx, wy, p[0], p[1], p[2], p[3], p[4], p[5]);   // sculpted massifs, ridges, basins
     h += 0.05 * n3(wx * 1.8, wy * 1.8);
     // organic coastline: warped ellipse, exactly flat beyond it
     const ex = x / (MW * 0.86), ey = y / 0.84;
@@ -393,6 +395,7 @@ function Isobands() {
   const verts = new FBuf(1 << 20), segs = new FBuf(1 << 18), runs = new FBuf(1 << 16);
   const P = new Float64Array(48), Q2 = new Float64Array(48);   // scratch polygons (x,y,g)*n
   function emitTri(ax, ay, bx, by, cx, cy, lv, ga, gb, gc) {
+    if (SKIP0 && lv === 0) return;
     verts.need(24); const a = verts.a; let n = verts.n;
     a[n++] = ax; a[n++] = -ay; a[n++] = lv; a[n++] = lv; a[n++] = 0; a[n++] = 0; a[n++] = 0; a[n++] = ga;
     a[n++] = bx; a[n++] = -by; a[n++] = lv; a[n++] = lv; a[n++] = 0; a[n++] = 0; a[n++] = 0; a[n++] = gb;
@@ -479,18 +482,25 @@ function Isobands() {
       a[i + 5] = v[0] / l; a[i + 6] = v[1] / l;
     }
   }
-  /* G: field in level units on the shared grid. sub: grid stride (1 = full res). */
-  function build(G, L, sub = 1) {
-    verts.reset(); segs.reset(); runs.reset();
-    const nx = Math.floor((GX - 1) / sub) + 1, ny = Math.floor((GY - 1) / sub) + 1;
-    const X = (i) => -MW + (i * sub + 0.5) * DX, Y = (j) => -1 + (j * sub + 0.5) * DY;
-    const val = (i, j) => G[(j * sub) * GX + i * sub] + 1e-4;
+  /* G: field in level units. sub: grid stride (1 = full res).
+     grid (optional): {w, h, x0, y0, dx, dy} for fields other than the map grid; skip0: omit band 0 (glyph solids) */
+  let SKIP0 = false;
+  function build(G, L, sub = 1, grid = null, skip0 = false) {
+    verts.reset(); segs.reset(); runs.reset(); SKIP0 = skip0;
+    const gw = grid ? grid.w : GX, gh = grid ? grid.h : GY;
+    const gx0 = grid ? grid.x0 : -MW + 0.5 * DX, gy0 = grid ? grid.y0 : -1 + 0.5 * DY;
+    const gdx = grid ? grid.dx : DX, gdy = grid ? grid.dy : DY;
+    const nx = Math.floor((gw - 1) / sub) + 1, ny = Math.floor((gh - 1) / sub) + 1;
+    const X = (i) => gx0 + i * sub * gdx, Y = (j) => gy0 + j * sub * gdy;
+    const val = (i, j) => G[(j * sub) * gw + i * sub] + 1e-4;
+    const DXr = gdx;
     for (let j = 0; j < ny - 1; j++) {
       let runStart = -1, runLv = -1;
       const y0 = Y(j), y1 = Y(j + 1);
       const flush = (iEnd) => {
         if (runStart >= 0) {
-          const e = 0.35 * DX, xa = X(runStart) - e, xb = X(iEnd) + e, ya = y0 - e, yb = y1 + e, gm = runLv + 0.5, lv = runLv;
+          if (SKIP0 && runLv === 0) { runStart = -1; runLv = -1; return; }
+          const e = 0.35 * DXr, xa = X(runStart) - e, xb = X(iEnd) + e, ya = y0 - e, yb = y1 + e, gm = runLv + 0.5, lv = runLv;
           runs.need(48); const a = runs.a; let n = runs.n;
           for (const [x, y] of [[xa, ya], [xb, ya], [xb, yb], [xa, ya], [xb, yb], [xa, yb]]) { a[n++] = x; a[n++] = -y; a[n++] = lv; a[n++] = lv; a[n++] = 0; a[n++] = 0; a[n++] = 0; a[n++] = gm; }
           runs.n = n;
@@ -537,16 +547,22 @@ const FIELD_VS = `#version 300 es
 in vec2 aPos;
 uniform mat4 uVP;
 uniform vec4 uWhipFrame;   // c.xy, dir.xy  (plan coords)
-uniform vec4 uPulse[4];    // pos, ampV, ampY, sigma
+uniform vec4 uPulse[6];    // pos, ampV, ampY, sigma
 uniform vec4 uSheet;       // amp, wavelength, phase, along-decay
+uniform sampler2D uSigV; uniform vec4 uRelief; uniform vec4 uMapRectV;   // relief: height, front x, front width, 0
 out vec3 vW;
 void main(){
   vec2 q = vec2(aPos.x, -aPos.y);
   float s = dot(q - uWhipFrame.xy, uWhipFrame.zw);
   float n = dot(q - uWhipFrame.xy, vec2(-uWhipFrame.w, uWhipFrame.z));
   float y = 0.;
-  for (int i = 0; i < 4; i++) { float x = (s - uPulse[i].x) / uPulse[i].w; y += uPulse[i].z * exp(-x * x) * exp(-n * n * 0.35); }
+  for (int i = 0; i < 6; i++) { float x = (s - uPulse[i].x) / uPulse[i].w; y += uPulse[i].z * exp(-x * x) * exp(-n * n * 0.35); }
   y += uSheet.x * sin(6.2831853 * s / uSheet.y - uSheet.z) * exp(-abs(s) * uSheet.w);
+  if (uRelief.x > 0.) {
+    float sd = textureLod(uSigV, (q - uMapRectV.xy) / uMapRectV.zw, 0.).r;
+    float rise = clamp((uRelief.y - q.x) / uRelief.z, 0., 1.);
+    y += uRelief.x * smoothstep(.014, -.014, sd) * rise * rise * (3. - 2. * rise);
+  }
   vW = vec3(aPos.x, y, aPos.y);
   gl_Position = uVP * vec4(vW, 1.);
 }`;
@@ -558,7 +574,7 @@ out vec4 oC;
 uniform vec3 uBg;
 uniform vec4 uA0, uA1, uA2, uA3, uA4, uB0, uB1, uB2, uB3, uB4;
 // X0: c.xy dir.xy | X1: W m0 f mode | X2: sp invS v0 hwPx | X3: rgb alpha | X4: hwWorld gapPx idxBoost idxEvery
-uniform vec4 uPulse[4]; uniform vec4 uSag; uniform vec4 uWhipFrame;
+uniform vec4 uPulse[6]; uniform vec4 uSag; uniform vec4 uWhipFrame;
 uniform vec4 uWeave;              // dir.xy, front, mode (0 A-top, 1 parity behind front, 2 B-top)
 uniform sampler2D uTerr; uniform vec4 uMapRect; uniform float uK; uniform float uKoff;
 uniform sampler2D uSig; uniform vec4 uSigP; uniform vec4 uSigQ;
@@ -572,7 +588,7 @@ uniform vec3 uEye; uniform vec2 uFog;
 float cover(float d, float w) { return max(0., min(d + w * .5, .5) - max(d - w * .5, -.5)); }
 float whipD(float s) {
   float d = 0.;
-  for (int i = 0; i < 4; i++) { float x = (s - uPulse[i].x) / uPulse[i].w; d += uPulse[i].y * exp(-x * x); }
+  for (int i = 0; i < 6; i++) { float x = (s - uPulse[i].x) / uPulse[i].w; d += uPulse[i].y * exp(-x * x); }
   float sl = s / uSag.y; d -= uSag.x * max(0., 1. - sl * sl);
   return d;
 }
@@ -671,23 +687,37 @@ void main() {
 }`;
 
 const FieldPlane = (() => {
-  let prog, vao, count;
-  function init() {
-    prog = Program(FIELD_VS, FIELD_FS);
-    const N = 240, S = 7;                       // grid over [-S,S]^2
-    const v = new Float32Array((N + 1) * (N + 1) * 2);
-    let k = 0;
-    for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) { v[k++] = -S + (2 * S * i) / N; v[k++] = -S + (2 * S * j) / N; }
-    const idx = new Uint32Array(N * N * 6); k = 0;
-    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-      const a = j * (N + 1) + i; idx[k++] = a; idx[k++] = a + 1; idx[k++] = a + N + 1; idx[k++] = a + 1; idx[k++] = a + N + 2; idx[k++] = a + N + 1;
+  let prog, vao, count, vaoD, countD;
+  // grid mesh over [x0,x1]x[z0,z1] with N x M cells; hole: skip cells fully inside [hx0,hx1]x[hz0,hz1]
+  function gridMesh(x0, x1, z0, z1, N, M, hole) {
+    const v = new Float32Array((N + 1) * (M + 1) * 2); let k = 0;
+    for (let j = 0; j <= M; j++) for (let i = 0; i <= N; i++) { v[k++] = x0 + ((x1 - x0) * i) / N; v[k++] = z0 + ((z1 - z0) * j) / M; }
+    const idx = []; 
+    for (let j = 0; j < M; j++) for (let i = 0; i < N; i++) {
+      if (hole) { const cx0 = x0 + ((x1 - x0) * i) / N, cx1 = x0 + ((x1 - x0) * (i + 1)) / N, cz0 = z0 + ((z1 - z0) * j) / M, cz1 = z0 + ((z1 - z0) * (j + 1)) / M;
+        if (cx0 >= hole[0] && cx1 <= hole[1] && cz0 >= hole[2] && cz1 <= hole[3]) continue; }
+      const a = j * (N + 1) + i; idx.push(a, a + 1, a + N + 1, a + 1, a + N + 2, a + N + 1);
     }
-    count = idx.length;
-    vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+    return { v, idx: new Uint32Array(idx) };
+  }
+  function makeVao(parts) {
+    let nv = 0; for (const p of parts) nv += p.v.length / 2;
+    const v = new Float32Array(nv * 2), idx = []; let off = 0, vo = 0;
+    for (const p of parts) { v.set(p.v, vo * 2); for (const i of p.idx) idx.push(i + vo); vo += p.v.length / 2; }
+    const ia = new Uint32Array(idx);
+    const va = gl.createVertexArray(); gl.bindVertexArray(va);
     const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, v, gl.STATIC_DRAW);
     const l = prog.a('aPos'); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 2, gl.FLOAT, false, 0, 0);
-    const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+    const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, ia, gl.STATIC_DRAW);
     gl.bindVertexArray(null);
+    return [va, ia.length];
+  }
+  function init() {
+    prog = Program(FIELD_VS, FIELD_FS);
+    const S = 7, H = [-2.08, 2.08, -1.2, 1.2];
+    [vao, count] = makeVao([gridMesh(-S, S, -S, S, 240, 240, null)]);
+    // relief: a dense core (≈3.5 px cells) for crisp letter walls, plus the coarse plane around it
+    [vaoD, countD] = makeVao([gridMesh(H[0], H[1], H[2], H[3], 640, 370, null), gridMesh(-S, S, -S, S, 240, 240, H)]);
   }
   function fam(pre, F) {
     const u = prog.u;
@@ -703,8 +733,8 @@ const FieldPlane = (() => {
     gl.uniformMatrix4fv(u('uVP'), false, cam.vp);
     gl.uniform3fv(u('uBg'), S.bg);
     fam('uA', S.A); fam('uB', S.B);
-    const P = new Float32Array(16);
-    for (let i = 0; i < 4; i++) { const p = S.pulses[i] || [0, 0, 0, 1]; P.set(p, i * 4); }
+    const P = new Float32Array(24);
+    for (let i = 0; i < 6; i++) { const p = S.pulses[i] || [0, 0, 0, 1]; P.set(p, i * 4); }
     gl.uniform4fv(u('uPulse'), P);
     gl.uniform4f(u('uSag'), S.sag[0], S.sag[1], 0, 0);
     gl.uniform4f(u('uWhipFrame'), 0, 0, 1, 0);
@@ -720,8 +750,11 @@ const FieldPlane = (() => {
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex.terr); gl.uniform1i(u('uTerr'), 0);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, tex.sig); gl.uniform1i(u('uSig'), 1);
     gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, tex.tit); gl.uniform1i(u('uTit'), 2);
-    gl.bindVertexArray(vao);
-    gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_INT, 0);
+    const rel = S.relief || [0, 0, 1, 0];
+    gl.uniform4fv(u('uRelief'), rel); gl.uniform4fv(u('uMapRectV'), MAPRECT);
+    gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, tex.sig); gl.uniform1i(u('uSigV'), 3);
+    if (rel[0] > 0) { gl.bindVertexArray(vaoD); gl.drawElements(gl.TRIANGLES, countD, gl.UNSIGNED_INT, 0); }
+    else { gl.bindVertexArray(vao); gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_INT, 0); }
     gl.bindVertexArray(null);
   }
   return { init, draw };
@@ -902,14 +935,15 @@ const LINE_VS = `#version 300 es
 in vec2 aC;
 in vec3 aP0; in vec3 aP1; in vec4 aCol; in vec2 aWD;   // width px, dash-phase(unused<0)
 uniform mat4 uVP; uniform vec2 uRes; uniform float uBias;
-out float vD; out vec4 vCol; flat out float vWd;
+out vec2 vDW; out vec4 vCol; flat out float vWd;   // vDW = (screen distance * w, w): divided per fragment -> screen-linear
 void main(){
   vec4 c0 = uVP * vec4(aP0, 1.), c1 = uVP * vec4(aP1, 1.);
-  // clip against near plane in clip space
-  float e = 1e-4;
-  if (c0.w < e && c1.w < e) { gl_Position = vec4(2., 2., 2., 1.); vD = 0.; vCol = vec4(0.); vWd = 0.; return; }
-  if (c0.w < e) c0 = mix(c0, c1, (e - c0.w) / (c1.w - c0.w));
-  if (c1.w < e) c1 = mix(c1, c0, (e - c1.w) / (c0.w - c1.w));
+  // clip exactly against the near plane (z + w >= 0 in clip space). Clipping at a tiny w instead leaves vertices with
+  // screen coordinates ~1e6 px, and the rasterizer then drops segments that pass behind the camera.
+  float e = 1e-6, P0 = c0.z + c0.w, P1 = c1.z + c1.w;
+  if (P0 < e && P1 < e) { gl_Position = vec4(2., 2., 2., 1.); vDW = vec2(0., 1.); vCol = vec4(0.); vWd = 0.; return; }
+  if (P0 < e) c0 = mix(c0, c1, (e - P0) / (P1 - P0));
+  if (P1 < e) c1 = mix(c1, c0, (e - P1) / (P0 - P1));
   vec2 s0 = c0.xy / c0.w * .5 * uRes, s1 = c1.xy / c1.w * .5 * uRes;
   vec2 d = s1 - s0; float L = length(d); d = L > 1e-5 ? d / L : vec2(1., 0.);
   vec2 n = vec2(-d.y, d.x);
@@ -918,14 +952,14 @@ void main(){
   vec2 off = n * aC.y * hw + d * (aC.x * 2. - 1.) * min(hw, aWD.x * .5 + .5);
   c.xy += off / (.5 * uRes) * c.w;
   c.z -= uBias * c.w;
-  gl_Position = c; vD = aC.y * hw; vCol = aCol; vWd = aWD.x;
+  gl_Position = c; vDW = vec2(aC.y * hw * c.w, c.w); vCol = aCol; vWd = aWD.x;
 }`;
 const LINE_FS = `#version 300 es
 precision highp float;
-in float vD; in vec4 vCol; flat in float vWd;
+in vec2 vDW; in vec4 vCol; flat in float vWd;
 out vec4 oC;
 float cover(float d, float w) { return max(0., min(d + w * .5, .5) - max(d - w * .5, -.5)); }
-void main(){ float a = cover(abs(vD), vWd) * vCol.a; if (a < .003) discard; oC = vec4(vCol.rgb, a); }`;
+void main(){ float a = cover(abs(vDW.x / vDW.y), vWd) * vCol.a; if (a < .003) discard; oC = vec4(vCol.rgb, a); }`;
 
 const Lines = (() => {
   let prog, vao, buf, cbuf;
@@ -1177,268 +1211,588 @@ const Text = (() => {
   return { init, screen, world, width, capHeight, flush, layout, fonts };
 })();
 
-/* ---- scene.js ---- */
+/* ---- solids.js ---- */
 /* =====================================================================
-   SCENE — the timeline. Every value below is a closed-form function of t.
-   Beat n is at n * 0.5 s. 16th notes at 0.125 s.
+   SOLIDS — the physical interface: lit slabs/boxes/cylinders, soft drop
+   shadows, contour-map surfaces on arbitrary 3D quads, and extruded glyph
+   solids (isobands of each glyph's own distance field) on drum odometers.
    ===================================================================== */
-const TEX = {};                 // textures (filled in init)
-const FIELDS = {};              // CPU fields (filled in init)
 
-const beat = (n) => n * BEAT;
+// light: horizontal direction toward the light (same as the terrace walls) + elevation for top faces
+const L3 = (() => { const a = [-0.95, 0.3], l = Math.hypot(a[0], a[1]); return [a[0] / l, 0.62, a[1] / l]; })();
+
+/* ---------------- 1. lit triangle meshes ----------------
+   per vertex: p.xyz n.xyz c.rgba mode
+   mode 0 = print surface (exact colour), 1 = sculpted wall (shadow -> lit ramp of c), 2 = diffuse */
+const SOLID_VS = `#version 300 es
+in vec3 aP; in vec3 aN; in vec4 aC; in float aM;
+uniform mat4 uVP;
+out vec3 vN; out vec4 vC; flat out float vM; out vec3 vW;
+void main(){ vN = aN; vC = aC; vM = aM; vW = aP; gl_Position = uVP * vec4(aP, 1.); }`;
+const SOLID_FS = `#version 300 es
+precision highp float;
+in vec3 vN; in vec4 vC; flat in float vM; in vec3 vW;
+uniform vec3 uL, uDark; uniform vec4 uStrata;
+out vec4 oC;
+float cover(float d, float w) { return max(0., min(d + w * .5, .5) - max(d - w * .5, -.5)); }
+void main(){
+  vec3 n = normalize(vN), col = vC.rgb;
+  if (vM > .5 && vM < 1.5) {
+    float lam = dot(normalize(vec3(n.x, 0., n.z) + 1e-6), normalize(vec3(uL.x, 0., uL.z))) * (1. - abs(n.y)) + n.y * .85;
+    col = mix(uDark, vC.rgb, smoothstep(-.45, 1., lam));
+    if (uStrata.z > 0. && abs(n.y) < .5) {               // strata hatching on vertical faces
+      float f = vW.y / uStrata.x, g = length(vec2(dFdx(f), dFdy(f)));
+      float d = abs(fract(f + .5) - .5) / max(g, 1e-6);
+      col = mix(col, col * .55, cover(d, uStrata.y) * uStrata.z * smoothstep(.6, 2.5, 1. / max(g, 1e-6)));
+    }
+  } else if (vM > 1.5) {
+    col = vC.rgb * (.55 + .45 * max(dot(n, normalize(uL)), 0.));
+  }
+  oC = vec4(col, vC.a);
+}`;
+const Solids = (() => {
+  let prog, vao, buf;
+  const B = new FBuf(1 << 16);
+  function init() {
+    prog = Program(SOLID_VS, SOLID_FS);
+    vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+    buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    const st = 44, at = (n, s, o) => { const l = prog.a(n); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, s, gl.FLOAT, false, st, o); };
+    at('aP', 3, 0); at('aN', 3, 12); at('aC', 4, 24); at('aM', 1, 40);
+    gl.bindVertexArray(null);
+  }
+  const V = (p, n, c, m) => B.push(p[0], p[1], p[2], n[0], n[1], n[2], c[0], c[1], c[2], c[3] ?? 1, m);
+  function tri(a, b, c, n, col, m) { V(a, n, col, m); V(b, n, col, m); V(c, n, col, m); }
+  function quad(a, b, c, d, n, col, m) { tri(a, b, c, n, col, m); tri(a, c, d, n, col, m); }
+  const nrm = (a, b, c) => norm3(cross3(sub3(b, a), sub3(c, a)));
+  // box from local min/max, transformed by an optional point mapper f(p) (rigid); tops print, sides sculpt
+  // (sideMode 1: shadow ramps to cobalt, for paper/ink; 2: plain diffuse, for orange so it never turns magenta)
+  function box(x0, y0, z0, x1, y1, z1, topCol, sideCol, f = null, botCol = null, sideMode = 1) {
+    const P = (x, y, z) => (f ? f([x, y, z]) : [x, y, z]);
+    const c = [P(x0, y0, z0), P(x1, y0, z0), P(x1, y0, z1), P(x0, y0, z1), P(x0, y1, z0), P(x1, y1, z0), P(x1, y1, z1), P(x0, y1, z1)];
+    const F = (a, b, cc, d, col, m) => quad(c[a], c[b], c[cc], c[d], nrm(c[a], c[b], c[cc]), col, m);
+    F(4, 7, 6, 5, topCol, 0);                 // top (+y)
+    F(0, 1, 2, 3, botCol || sideCol, sideMode);   // bottom
+    F(3, 2, 6, 7, sideCol, sideMode);             // +z (south)
+    F(1, 0, 4, 5, sideCol, sideMode);             // -z (north)
+    F(0, 3, 7, 4, sideCol, sideMode);             // -x (west)
+    F(2, 1, 5, 6, sideCol, sideMode);             // +x (east)
+  }
+  // cylinder along local x from x0..x1, radius r around (cy, cz)
+  function cylinderX(x0, x1, cy, cz, r, col, segs = 28, f = null) {
+    const P = (x, y, z) => (f ? f([x, y, z]) : [x, y, z]);
+    for (let i = 0; i < segs; i++) {
+      const a0 = (i / segs) * TAU, a1 = ((i + 1) / segs) * TAU;
+      const y0 = cy + r * Math.cos(a0), z0 = cz + r * Math.sin(a0), y1 = cy + r * Math.cos(a1), z1 = cz + r * Math.sin(a1);
+      const n = norm3(sub3(P(0, (y0 + y1) / 2, (z0 + z1) / 2), P(0, cy, cz)));
+      quad(P(x0, y0, z0), P(x1, y0, z0), P(x1, y1, z1), P(x0, y1, z1), n, col, 1);
+      tri(P(x0, cy, cz), P(x0, y1, z1), P(x0, y0, z0), norm3(sub3(P(-1, 0, 0), P(0, 0, 0))), col, 1);
+      tri(P(x1, cy, cz), P(x1, y0, z0), P(x1, y1, z1), norm3(sub3(P(1, 0, 0), P(0, 0, 0))), col, 1);
+    }
+  }
+  function flush(cam, strata = [0.02, 1, 0]) {
+    const n = B.n / 11; if (!n) return;
+    prog.use(); const u = prog.u;
+    gl.uniformMatrix4fv(u('uVP'), false, cam.vp);
+    gl.uniform3fv(u('uL'), L3); gl.uniform3fv(u('uDark'), WALL_DARK_S);
+    gl.uniform4f(u('uStrata'), strata[0], strata[1] * PX, strata[2], 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, B.view(), gl.DYNAMIC_DRAW);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.bindVertexArray(vao); gl.drawArrays(gl.TRIANGLES, 0, n); gl.bindVertexArray(null);
+    gl.disable(gl.BLEND);
+    B.reset();
+  }
+  return { init, tri, quad, box, cylinderX, flush };
+})();
+const WALL_DARK_S = [0.085, 0.105, 0.56];
+
+/* soft drop shadow of a rectangle footprint (x0..x1, z0..z1) floating at height h, cast on the ground */
+function dropShadow(x0, z0, x1, z1, h, strength = 0.22, groundY = 0.0008) {
+  if (h <= 1e-4) return;
+  const k = 0.55, dx = -L3[0] * h * k, dz = -L3[2] * h * k;
+  const layers = 4;
+  for (let i = 0; i < layers; i++) {
+    const g = (i / (layers - 1) - 0.5) * h * 0.22;
+    const a = (strength / layers) * clamp(1.4 - h * 0.6, 0.35, 1);
+    Fills.rectXZ(x0 + dx - g, z0 + dz - g, x1 + dx + g, z1 + dz + g, groundY + i * 1e-5, [INK[0], INK[1], INK[2], a]);
+  }
+}
+
+/* ---------------- 2. contour-map surfaces on any 3D quad ----------------
+   per vertex: p.xyz q.xy (map plan coordinates). Lines are the same analytic level sets as everywhere else. */
+const MAPS_VS = `#version 300 es
+in vec3 aP; in vec2 aQ; in vec2 aA;
+uniform mat4 uVP;
+out vec2 vQ; out vec2 vA;
+void main(){ vQ = aQ; vA = aA; gl_Position = uVP * vec4(aP, 1.); }`;
+const MAPS_FS = `#version 300 es
+precision highp float;
+in vec2 vQ; in vec2 vA;
+uniform sampler2D uT1, uT2; uniform float uMix, uK, uOff;
+uniform vec4 uMapRect; uniform vec3 uBg, uLine; uniform vec4 uW;   // w, wIdx, every, alpha
+uniform vec4 uFlip;                                                   // global invert amount; vA.y = per-quad invert
+out vec4 oC;
+float cover(float d, float w) { return max(0., min(d + w * .5, .5) - max(d - w * .5, -.5)); }
+void main(){
+  vec2 uv = (vQ - uMapRect.xy) / uMapRect.zw;
+  float h = mix(texture(uT1, uv).r, texture(uT2, uv).r, uMix);
+  float F = uK * h + uOff;
+  float g = length(vec2(dFdx(F), dFdy(F)));
+  float n = floor(F);
+  float w = abs(mod(n, uW.z)) < .5 ? uW.y : uW.x;
+  float d = fract(F) / max(g, 1e-7);
+  float c = cover(abs(d - w * .5), w) * step(.5, n);
+  float sp = 1. / max(g, 1e-7);
+  c = mix(c, min(w / sp, 1.) * step(.5, n), smoothstep(3., 1.4, sp));
+  float fl = clamp(uFlip.x + vA.y, 0., 1.);
+  vec3 bg = mix(uBg, uLine, fl), ln = mix(uLine, uBg, fl);
+  oC = vec4(mix(bg, ln, c * uW.w), vA.x);
+}`;
+const MAP_LIFT = 4e-4;
+const MapSurf = (() => {
+  let prog, vao, buf;
+  const B = new FBuf(1 << 12);
+  function init() {
+    prog = Program(MAPS_VS, MAPS_FS);
+    vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+    buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    const st = 28, at = (n, s, o) => { const l = prog.a(n); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, s, gl.FLOAT, false, st, o); };
+    at('aP', 3, 0); at('aQ', 2, 12); at('aA', 2, 20);
+    gl.bindVertexArray(null);
+  }
+  // quad corners p0..p3 (world) carrying plan coords q0..q3; flip inverts paper/ink on this quad only.
+  // Callers lift the quad MAP_LIFT above the face it prints on (no polygon offset: that would hide lines at grazing angles).
+  function quad(p, q, a = 1, flip = 0) { for (const i of [0, 1, 2, 0, 2, 3]) B.push(p[i][0], p[i][1], p[i][2], q[i][0], q[i][1], a, flip); }
+  function draw(cam, o = {}) {
+    const n = B.n / 7; if (!n) return;
+    prog.use(); const u = prog.u;
+    gl.uniformMatrix4fv(u('uVP'), false, cam.vp);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, TEX.terr); gl.uniform1i(u('uT1'), 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, TEX.terr2); gl.uniform1i(u('uT2'), 1);
+    gl.uniform1f(u('uMix'), o.mix ?? 1); gl.uniform1f(u('uK'), LEVELS); gl.uniform1f(u('uOff'), 0.5);
+    gl.uniform4fv(u('uMapRect'), MAPRECT); gl.uniform3fv(u('uBg'), o.bg || INK); gl.uniform3fv(u('uLine'), o.line || PAPER);
+    gl.uniform4f(u('uW'), (o.w ?? 1.2) * PX, (o.wIdx ?? 2.28) * PX, o.every ?? 5, o.alpha ?? 1);
+    gl.uniform4f(u('uFlip'), o.flip ?? 0, 0, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, B.view(), gl.DYNAMIC_DRAW);
+    gl.bindVertexArray(vao); gl.drawArrays(gl.TRIANGLES, 0, n); gl.bindVertexArray(null);
+    B.reset();
+  }
+  return { init, quad, draw };
+})();
+
+/* ---------------- 3. extruded glyph solids + drum odometers ---------------- */
+const GLYPH_VS = `#version 300 es
+in vec2 aPos; in vec3 aLv; in vec2 aN; in float aG;
+uniform mat4 uVP, uM; uniform float uDepth;
+out vec3 vN; flat out float vKind;
+void main(){
+  float y = mix(aLv.x, aLv.y, aLv.z) * uDepth;
+  bool wall = dot(aN, aN) > .01;
+  vN = mat3(uM) * (wall ? vec3(aN.x, 0., aN.y) : vec3(0., 1., 0.));
+  vKind = wall ? 1. : 0.;
+  gl_Position = uVP * (uM * vec4(aPos.x, y, aPos.y, 1.));
+}`;
+const GLYPH_FS = `#version 300 es
+precision highp float;
+in vec3 vN; flat in float vKind;
+uniform vec3 uCap, uLit, uDark, uL;
+out vec4 oC;
+void main(){
+  vec3 n = normalize(vN);
+  if (vKind < .5) { oC = vec4(uCap, 1.); return; }
+  float lam = dot(n, normalize(uL));
+  oC = vec4(mix(uDark, uLit, smoothstep(-.45, 1., lam)), 1.);
+}`;
+const Glyph3D = (() => {
+  let prog;
+  const cache = {};
+  function init() { prog = Program(GLYPH_VS, GLYPH_FS); }
+  // build (once) an extruded mesh for one glyph; local units: 1 = font em, y up, baseline at 0
+  function mesh(fk, ch) {
+    const key = fk + ':' + ch;
+    if (cache[key]) return cache[key];
+    const em = 160, pad = 12;
+    const css = fk === 'display' ? `900 ${em}px "IDB"` : `600 ${em}px "IST"`;
+    const cv = document.createElement('canvas'), cx = cv.getContext('2d', { willReadFrequently: true });
+    cx.font = css;
+    const m = cx.measureText(ch);
+    const l = Math.ceil(m.actualBoundingBoxLeft) + pad, r = Math.ceil(m.actualBoundingBoxRight) + pad;
+    const a = Math.ceil(m.actualBoundingBoxAscent) + pad, d = Math.ceil(m.actualBoundingBoxDescent) + pad;
+    const w = l + r, h = a + d;
+    cv.width = w; cv.height = h;
+    cx.font = css; cx.fillStyle = '#000'; cx.fillRect(0, 0, w, h); cx.fillStyle = '#fff'; cx.fillText(ch, l, a);
+    const img = cx.getImageData(0, 0, w, h).data, al = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) al[i] = img[i * 4];
+    const sd = sdfFromAlpha(al, w, h);
+    // grid rows bottom-up, field crosses 1 on the outline
+    const G = new Float32Array(w * h);
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) G[j * w + i] = clamp(1 - sd[(h - 1 - j) * w + i] / 3, 0, 1.9);
+    const iso = Isobands();
+    const res = iso.build(G, 1, 1, { w, h, x0: (0.5 - l) / em, y0: (0.5 - d) / em, dx: 1 / em, dy: 1 / em }, true);
+    const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+    const vbo = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vbo); gl.bufferData(gl.ARRAY_BUFFER, res.verts, gl.STATIC_DRAW);
+    const st = 32, at = (n, s, o) => { const lc = prog.a(n); if (lc < 0) return; gl.enableVertexAttribArray(lc); gl.vertexAttribPointer(lc, s, gl.FLOAT, false, st, o); };
+    at('aPos', 2, 0); at('aLv', 3, 8); at('aN', 2, 20); at('aG', 1, 28);
+    gl.bindVertexArray(null);
+    return (cache[key] = { vao, nv: res.nv, adv: m.width / em, minX: -m.actualBoundingBoxLeft / em, maxX: m.actualBoundingBoxRight / em, asc: m.actualBoundingBoxAscent / em });
+  }
+  const queue = [];
+  // place a glyph: M maps glyph-local (x right, y extrusion, z = text-down; isobands already store z = -glyph-up) to world
+  function put(fk, ch, M, depth, cap, lit, dark) { queue.push({ g: mesh(fk, ch), M, depth, cap, lit, dark }); }
+  function flush(cam) {
+    if (!queue.length) return;
+    prog.use(); const u = prog.u;
+    gl.uniformMatrix4fv(u('uVP'), false, cam.vp); gl.uniform3fv(u('uL'), L3);
+    for (const q of queue) {
+      gl.uniformMatrix4fv(u('uM'), false, q.M); gl.uniform1f(u('uDepth'), q.depth);
+      gl.uniform3fv(u('uCap'), q.cap); gl.uniform3fv(u('uLit'), q.lit); gl.uniform3fv(u('uDark'), q.dark);
+      gl.bindVertexArray(q.g.vao); gl.drawArrays(gl.TRIANGLES, 0, q.g.nv);
+    }
+    gl.bindVertexArray(null); queue.length = 0;
+  }
+  return { init, mesh, put, flush };
+})();
+
+// 4x4 helpers (column-major)
+const M4 = {
+  I: () => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]),
+  T: (x, y, z) => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1]),
+  S: (s) => new Float32Array([s, 0, 0, 0, 0, s, 0, 0, 0, 0, s, 0, 0, 0, 0, 1]),
+  Rx: (a) => { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([1, 0, 0, 0, 0, c, s, 0, 0, -s, c, 0, 0, 0, 0, 1]); },
+  Ry: (a) => { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1]); },
+  mul: (...ms) => ms.reduce((a, b) => mul4(a, b)),
+};
+
+/* drum odometer: glyphs on a cylinder around an axis parallel to world x.
+   frame(p) maps drum-local points to world (for slabs that tilt); value is continuous (wheel position). */
+function drum(fk, chars, value, o) {
+  const n = chars.length, step = TAU / n * (o.spread ?? 1);
+  const size = o.size, R = o.radius ?? size * 0.62, depth = o.depth ?? size * 0.12;
+  const base = o.base;              // matrix: drum frame -> world (origin = drum axis at the cell's left edge)
+  for (let i = 0; i < n; i++) {
+    let k = i - (value % n); if (k > n / 2) k -= n; if (k < -n / 2) k += n;
+    const th = k * step;
+    if (Math.abs(th) > 1.9) continue;
+    const g = Glyph3D.mesh(fk, chars[i]);
+    const cx = (o.cell - (g.maxX + g.minX) * size) / 2;          // centre horizontally in the cell
+    const M = M4.mul(base, M4.Rx(th), M4.T(cx, R, g.asc * size * 0.5), M4.S(size));
+    Glyph3D.put(fk, chars[i], M, depth / size, o.cap, o.lit, o.dark);
+  }
+}
+
+/* ---- scene_core.js ---- */
+/* =====================================================================
+   SCENE (75 s) — core: camera, Movement I, title/loop, captions, dispatcher.
+   Every value is a closed-form function of absolute time t (beat n = n * 0.5 s).
+   ===================================================================== */
+const TEX = {};
+const FIELDS = {};
 const famDefaults = () => ({ c: [0, 0], ang: 0, W: 0, m: 0, mode: 0, sp: 1, invS: 1, v0: 0, hw: 0.5, hwW: 0, col: ORANGE, alpha: 1, gap: 0, boost: 1, every: 5 });
 const fam = (o) => Object.assign(famDefaults(), o);
+const C4 = (c, a = 1) => [c[0], c[1], c[2], a];
 
-/* ----------------------------------------------------------------- interface layout (plan view)
-   12-col grid on 1920x1080, 72px margins, 24px gutters. 1 world unit = UI_S px. */
+/* movement boundaries (s) */
+const MV = { I: 0, II: 16, III: 32, IV: 48, V: 62, END: 75 };
+
+/* interface layout (plan view) — 12-col grid on 1920x1080, 72px margins, 24px gutters */
 const UI_S = 1176 / (2 * MW);
 const UI_CX = -MW + (960 - 72) / UI_S, UI_CZ = -1 + (540 - 120) / UI_S;
 const UI_DIST = (540 / UI_S) / Math.tan(15 * DEG);
 const UI_GUT = 24 / UI_S;
-const UI_BOT = UI_CZ + (1008 - 540) / UI_S;      // bottom margin line (world z)
-const UI_RIGHT = UI_CX + (1848 - 960) / UI_S;    // right margin line (world x)
-/* ----------------------------------------------------------------- camera
-   One continuous periodic camera curve: [tx, ty, tz, dist, yaw(deg), pitch(deg), fov(deg)] */
+const UI_BOT = UI_CZ + (1008 - 540) / UI_S;
+const UI_RIGHT = UI_CX + (1848 - 960) / UI_S;
 const PD = PLAN_DIST;
+
+/* ----------------------------------------------------------------- camera
+   One periodic curve over 75 s: [tx, ty, tz, dist, yaw°, pitch°, fov°]. Yaw drifts -360° per cycle:
+   the camera circles the landscape once per loop and never unwinds. */
+const Y0 = -360;
 const CAM_KEYS = [
+  // I · thread -> signal
   [0.0, [0.3, 0, 0.0, 1.45, -78, 11, 44]],
-  [0.5, [0.25, 0, 0.0, 1.95, -69, 17, 40]],
-  [1.0, [0.08, 0, 0, 2.95, -49, 35, 33]],
-  [1.5, [0.02, 0, 0, 3.45, -21, 63, 31]],
-  [2.0, [0, 0, 0, PD, 0, 90, 30], { hold: true }],
-  [4.0, [0, 0, 0, PD * 0.955, 0, 90, 30]],
-  [5.0, [0, 0, 0, PD * 0.945, 0, 90, 30]],
-  [6.0, [0, 0, 0, PD * 0.915, 0, 90, 30], { hold: true }],
-  [6.5, [-0.2, 0.05, 0.05, 2.7, -26, 52, 32]],
-  [7.0, [-0.45, 0.22, 0.02, 1.7, -64, 24, 40]],
-  [7.5, [0.35, 0.30, 0.0, 1.5, -86, 17, 42]],
-  [8.0, [0.9, 0.32, 0.0, 1.45, -92, 21, 40]],
-  [8.5, [0.55, 0.08, 0.2, 3.7, -38, 60, 34]],
-  [9.0, [UI_CX, 0, UI_CZ, UI_DIST, 0, 90, 30], { hold: true }],
-  [10.0, [UI_CX, 0, UI_CZ, UI_DIST * 0.995, 0, 90, 30]],
-  [11.75, [UI_CX, 0, UI_CZ, UI_DIST * 0.98, 0, 90, 30]],
-  [12.0, [UI_CX, 0, UI_CZ, UI_DIST * 0.975, 0, 90, 30], { m: [-1.4, 0.35, 0.2, -5.0, -26, -70, 10] }],
-  [12.5, [0.05, 0.32, 0.5, 2.55, -26, 29, 38]],
-  [13.0, [0.5, 0.36, 0.06, 2.05, 24, 24, 40]],
-  [13.5, [0.12, 0.15, 0.0, 2.9, 7, 61, 33]],
-  [14.0, [0, 0, 0, PD, 0, 90, 30], { hold: true }],
-  [14.5, [0, 0, 0, PD, 0, 90, 30], { hold: true }],
+  [1.0, [0.45, 0, 0.0, 1.75, -74, 13, 42]],
+  [2.0, [0.4, 0, 0.0, 2.1, -68, 17, 40]],
+  [3.0, [0.3, 0, 0.0, 2.45, -60, 24, 38]],
+  [4.0, [0.2, 0, 0.0, 2.8, -48, 32, 36]],
+  [5.0, [0.1, 0, 0.0, 3.05, -34, 42, 34]],
+  [6.0, [0.05, 0, 0.0, 3.3, -20, 56, 32]],
+  [7.0, [0.0, 0, 0.0, 3.55, -7, 74, 30]],
+  [8.0, [0, 0, 0, PD, 0, 90, 30], { hold: true }],
+  [10.0, [0, 0, 0, PD * 0.965, 0, 90, 30]],
+  [12.0, [0, 0, 0, PD * 0.95, 0, 90, 30], { hold: true }],
+  [13.0, [0.15, 0.05, 0.12, 3.0, -16, 50, 32]],
+  [14.0, [0, 0, 0, PD * 0.95, 0, 90, 30], { hold: true }],
+  // II · terrain
+  [16.0, [0, 0, 0, PD * 0.945, 0, 90, 30]],
+  [20.0, [0, 0, 0, PD * 0.9, 0, 90, 30], { hold: true }],
+  [20.75, [-0.2, 0.05, 0.05, 2.7, -26, 52, 32]],
+  [22.0, [-0.45, 0.22, 0.02, 1.7, -64, 24, 40]],
+  [23.0, [0.35, 0.30, 0.0, 1.5, -86, 17, 42]],
+  [24.5, [0.95, 0.30, 0.02, 1.5, -100, 21, 40]],
+  [26.0, [0.55, 0.32, -0.15, 1.75, -138, 26, 40]],
+  [27.0, [0.05, 0.30, -0.2, 2.0, -182, 29, 38]],
+  [28.0, [-0.2, 0.22, 0.0, 2.6, -228, 33, 36]],
+  [29.0, [0.1, 0.05, 0.2, 4.4, -282, 40, 34]],
+  [30.0, [0.3, 0.0, 0.25, 4.9, -322, 52, 33]],
+  [31.0, [UI_CX, 0, UI_CZ, UI_DIST, Y0, 90, 30], { hold: true }],
+  // III · system (3D)
+  [34.0, [UI_CX, 0, UI_CZ, UI_DIST, Y0, 90, 30], { hold: true }],
+  [35.2, [1.0, 0.3, 0.3, 6.9, Y0 + 26, 40, 32]],
+  [37.0, [1.05, 0.3, 0.25, 6.4, Y0 + 38, 34, 32]],
+  // fly-through: down onto the drum counter, then skimming west along the thread on the map
+  [38.2, [2.45, 0.5, -0.5, 1.6, Y0 + 30, 27, 40]],
+  [39.1, [0.2, 0.64, 0.36, 1.15, Y0 + 75, 13, 46]],
+  [40.0, [-1.4, 0.64, 0.36, 1.25, Y0 + 95, 18, 44]],
+  [41.0, [0.7, 0.3, 0.45, 6.2, Y0 + 40, 32, 34]],
+  [42.5, [0.85, 0.25, 0.35, 6.5, Y0 + 30, 42, 32]],
+  [44.0, [0.6, 0.2, 0.2, 6.2, Y0 + 26, 54, 32]],
+  [46.0, [0.25, 0.1, 0.1, 6.0, Y0 + 20, 58, 32]],
+  // IV · network
+  [48.0, [0.2, 0.15, 0.1, 6.0, Y0 + 26, 46, 32]],
+  [50.0, [0.5, 0.25, 0.2, 4.6, Y0 + 50, 30, 36]],
+  // street level: down the avenue the subdivision opened under the thread, east -> west
+  [51.3, [2.6, 0.16, 0.0, 1.0, Y0 + 90, 6, 46]],
+  [52.6, [0.9, 0.15, 0.0, 1.0, Y0 + 90, 4, 48]],
+  [53.8, [-0.8, 0.15, 0.0, 1.0, Y0 + 90, 5, 48]],
+  [54.5, [-1.8, 0.3, 0.0, 1.6, Y0 + 90, 40, 44]],      // crane straight up out of the avenue
+  [55.4, [-1.3, 0.3, -0.1, 3.7, Y0 + 145, 42, 36]],
+  [56.3, [0.0, 0.15, 0.0, 4.6, Y0 + 205, 50, 34]],
+  [57.6, [0.1, 0.1, 0.0, 5.6, Y0 + 255, 60, 32]],
+  [59.0, [0, 0, 0, PD * 1.05, Y0 + 336, 86, 30]],
+  [60.5, [0, 0, 0, PD, Y0 + 360, 90, 30], { hold: true }],
+  [61.95, [0, 0, 0, PD * 0.99, Y0 + 360, 90, 30], { hold: true }],
+  // V · monument + identity
+  [62.0, [0, 0, 0, PD * 0.99, Y0 + 360, 90, 30], { m: [-0.6, 0.2, 0.3, -2.2, -26, -70, 8] }],
+  [62.7, [0.05, 0.32, 0.5, 2.55, Y0 + 334, 29, 38]],
+  [63.8, [0.5, 0.36, 0.1, 2.35, Y0 + 376, 23, 40]],
+  [65.2, [0.3, 0.32, 0.0, 2.65, Y0 + 402, 27, 38]],
+  [66.6, [-0.5, 0.3, 0.0, 2.55, Y0 + 386, 21, 40]],
+  [68.0, [-0.3, 0.25, 0.0, 2.9, Y0 + 350, 34, 36]],
+  [69.2, [0.0, 0.08, 0.0, 3.3, Y0 + 356, 70, 32]],
+  [70.0, [0, 0, 0, PD, Y0 + 360, 90, 30], { hold: true }],
+  [74.5, [0, 0, 0, PD * 0.955, Y0 + 360, 90, 30], { hold: true }],
 ];
-let camTrack = Track(CAM_KEYS, DUR);
+const camTrack = Track(CAM_KEYS, DUR, [0, 0, 0, 0, Y0, 0, 0]);
 function camAt(t) {
   const v = window.__camOverride ? window.__camOverride : camTrack(t);
   return camera({ tx: v[0], ty: v[1], tz: v[2], dist: v[3], yaw: v[4] * DEG, pitch: Math.min(90, v[5]) * DEG, fov: v[6] * DEG });
 }
 
-/* ----------------------------------------------------------------- bar 1: thread
-   `u` may be negative: the end of the film evaluates these same functions at u = t - 15. */
-const SPLITS = [0.5, 0.625, 0.75, 0.875, 1.5, 1.625, 1.75, 1.875];
+/* ----------------------------------------------------------------- I · the thread (u may be negative at the loop end) */
+const SPLITS = [2.0, 2.125, 2.25, 2.375, 6.0, 6.125, 6.25, 6.375];
 const mOpen = (u) => { let m = 0; for (const s of SPLITS) m += snap(u - s, 0.11, 6); return m; };
-const bandW = (u) => 0.42 + 0.68 * E.outExpo(unit(0.5, 1.0, u), 5) + 2.9 * E.inOutCubic(unit(1.5, 1.95, u));
+const bandW = (u) => 0.42 + 0.68 * E.outExpo(unit(2.0, 2.6, u), 5) + 2.9 * E.inOutCubic(unit(6.0, 6.45, u));
 const threadHW = (m) => Math.max(0.65, 3.8 * Math.pow(2, -0.32 * m));
-
+// a whip on every kick of bar 1: outward, from the left, from the right, inward (they meet at the split)
+const WHIPS = [[0.0, [0, 0], [1, -1], 0.15], [0.5, [-3.2], [1], 0.11], [1.0, [3.2], [-1], 0.11], [1.5, [-3.0, 3.0], [1, -1], 0.09]];
 function whipPulses(u) {
-  if (u < 0 || u > 0.9) return [];
-  const env = (1 - Math.exp(-u / 0.022)) * Math.exp(-u / 0.36);
-  const envY = (1 - Math.exp(-u / 0.03)) * Math.exp(-u / 0.30);
-  const c = 4.4, sig = 0.22 + 0.55 * u;
-  return [[c * u, 0.15 * env, 0.1 * envY, sig], [-c * u, 0.15 * env, 0.1 * envY, sig]];
+  const out = [];
+  for (const [t0, s0, dir, A] of WHIPS) {
+    const tau = u - t0; if (tau < 0 || tau > 1.2) continue;
+    const env = (1 - Math.exp(-tau / 0.022)) * Math.exp(-tau / 0.36), envY = (1 - Math.exp(-tau / 0.03)) * Math.exp(-tau / 0.3);
+    const c = 4.4, sig = 0.22 + 0.55 * tau;
+    for (let k = 0; k < s0.length; k++) out.push([s0[k] + dir[k] * c * tau, A * env, (A / 1.5) * envY, sig]);
+  }
+  return out.slice(0, 6);
 }
-function sagAt(u) {        // slack before the snap (only exists in the last 0.3 s of the loop)
+function sagAt(u) {
   if (u >= 0 || u < -0.3) return [0, 4];
   const k = 1 - E.inExpo(unit(-0.3, 0, u), 4);
   return [0.075 * k * sstep(-0.3, -0.22, u), 2.6];
 }
+// fabric billows: phasor sum of one wavelength, so several waves fold into the shader's single sheet term
 function sheetWave(u) {
-  let a = 0, ph = 0;
-  for (const [tk, amp] of [[0.5, 0.045], [1.0, 0.035], [1.5, 0.02]]) {
+  let re = 0, im = 0;
+  for (const [tk, amp] of [[2.5, 0.04], [3.0, 0.05], [3.5, 0.06], [4.5, 0.08], [5.0, 0.09], [5.5, 0.07], [6.5, 0.04], [7.0, 0.02]]) {
     const tau = u - tk; if (tau < 0) continue;
-    const e = (1 - Math.exp(-tau / 0.04)) * Math.exp(-tau / 0.22);
-    a += amp * e; ph = TAU * tau / 0.42;
+    const e = (1 - Math.exp(-tau / 0.05)) * Math.exp(-tau / 0.45) * amp, ph = TAU * tau / 0.6;
+    re += e * Math.cos(ph); im += e * Math.sin(ph);
   }
-  return [a, 1.3, ph, 0.25];
+  const fade = 1 - sstep(7.0, 7.8, u);
+  return [Math.hypot(re, im) * fade, 1.5, Math.atan2(im, re), 0.18];
 }
-
 function fieldOpening(u) {
   const m = mOpen(u), Wd = bandW(u), hw = threadHW(m);
   const spacePx = (Wd / Math.pow(2, Math.floor(m) + 1)) / WPX;
   const gap = clamp(0.12 * spacePx, 0, 2.6);
   const A = fam({ ang: 0, W: Wd, m, mode: 0, hw: 0.5, hwW: hw * WPX, col: ORANGE, gap });
-  const B = fam({ ang: 90 * DEG * E.outExpo(unit(1.0, 1.42, u), 6), W: Wd, m, mode: 0, hw: 0.5, hwW: hw * WPX, col: PAPER, gap });
+  const B = fam({ ang: 90 * DEG * E.outExpo(unit(4.0, 4.42, u), 6), W: Wd, m, mode: 0, hw: 0.5, hwW: hw * WPX, col: PAPER, gap });
   let front = -4;
-  for (let i = 0; i < 6; i++) front += 1.45 * snap(u - (1.0 + i * 0.1), 0.08, 6);
-  return { A, B, pulses: whipPulses(u), sag: sagAt(u), sheet: sheetWave(u),
-           weave: [Math.SQRT1_2, Math.SQRT1_2, front, u >= 1.0 ? 1 : 0] };
+  for (let i = 0; i < 6; i++) front += 1.45 * snap(u - (4.25 + i * 0.1), 0.08, 6);
+  return { A, B, pulses: whipPulses(u), sag: sagAt(u), sheet: sheetWave(u), weave: [Math.SQRT1_2, Math.SQRT1_2, front, u >= 4.0 ? 1 : 0] };
 }
 
-/* ----------------------------------------------------------------- bars 2-3: signal -> terrain */
-const SP = 4 / 256;   // grating spacing after full subdivision
+/* ----------------------------------------------------------------- I/II · interference -> SIGNAL -> relief -> contours */
+const SP = 4 / 256;
 function fieldSignal(t) {
-  // white family ratchets toward the orange: angle halves on every 16th
-  let K = 0; for (let k = 0; k < 12; k++) K += snap(t - (2.0 + k * 0.125), 0.09, 6);
-  const angB = 90 * DEG * Math.pow(2, -K) * (1 - sstep(3.4, 3.7, t));
-  const gap = 0.84 * (1 - E.outExpo(unit(2.0, 2.3, t), 4));
-  // bar 3: exponential stretch of both gratings (lambda -> infinity)
-  const SA = Math.exp(9.5 * Math.pow(unit(4.0, 5.0, t), 1.6));
-  const SB = t >= 5.35 ? Infinity : Math.exp(9.5 * Math.pow(unit(4.45, 5.35, t), 1.5));
-  const hwA = mix(0.65, 1.5, E.inOutCubic(unit(4.6, 5.1, t)));
+  let K = 0; for (let k = 0; k < 12; k++) K += snap(t - (8.0 + k * 0.125), 0.09, 6);
+  const angB = 90 * DEG * Math.pow(2, -K) * (1 - sstep(9.4, 9.7, t));
+  const gap = 0.84 * (1 - E.outExpo(unit(8.0, 8.3, t), 4));
+  const SA = Math.exp(9.5 * Math.pow(unit(16.0, 17.6, t), 1.6));
+  const SB = t >= 18.0 ? Infinity : Math.exp(9.5 * Math.pow(unit(16.6, 18.0, t), 1.5));
+  const hwA = mix(0.65, 1.5, E.inOutCubic(unit(17.0, 17.6, t)));
   const A = fam({ ang: 0, mode: 1, sp: SP, invS: 1 / SA, v0: SP / 2, hw: hwA, col: ORANGE, gap });
-  const B = fam({ ang: angB, mode: 1, sp: SP, invS: 1 / SB, v0: SP / 2, hw: mix(0.65, 0.6, unit(4.5, 5.5, t)), col: PAPER, gap, boost: 1.9, every: 5 });
-  // SIGNAL: emerges at beat 5, stretches (6), splits (6.5), reconstructs (7), melts (7.5)
-  const amount = t >= 2.5 ? 1 : 0;
-  const wipeY = mix(1.15, -1.15, E.outExpo(unit(2.5, 2.62, t), 4));
-  const stretch = 1 + 1.45 * E.inExpo(unit(3.0, 3.22, t), 5) - 1.45 * E.outExpo(unit(3.5, 3.7, t), 6);
-  const split = 0.42 * (E.outExpo(unit(3.25, 3.36, t), 6) - spring(t - 3.5, 30) * (t >= 3.5 ? 1 : 0));
-  const melt = E.inOutCubic(unit(3.72, 4.25, t));
-  const blur = 0.16 * melt;
-  const phase = 0.5 + 2.6 * melt;
-  const duty = 0.42 * (1 - melt);
-  const morph = E.inOutCubic(unit(3.95, 4.55, t));
-  const Kt = LEVELS * E.inOutCubic(unit(3.85, 4.5, t));
-  // bar 3 beat 11: index-contour sweep, and the weave resolves to "thread on top"
-  const sw = E.inOutCubic(unit(5.5, 5.92, t));
-  const sweep = mix(-2.2, 2.2, sw);
-  const front = t < 5.5 ? 4 : mix(3, -3, sw);
+  const B = fam({ ang: angB, mode: 1, sp: SP, invS: 1 / SB, v0: SP / 2, hw: mix(0.65, 0.6, unit(17.0, 18.0, t)), col: PAPER, gap, boost: 1.9, every: 5 });
+  const amount = t >= 10.5 ? 1 : 0;
+  const wipeY = mix(1.15, -1.15, E.outExpo(unit(10.5, 10.62, t), 4));
+  const stretch = 1 + 1.45 * E.inExpo(unit(11.0, 11.22, t), 5) - 1.45 * E.outExpo(unit(11.5, 11.7, t), 6);
+  const split = 0.42 * (E.outExpo(unit(11.25, 11.36, t), 6) - spring(t - 11.5, 30) * (t >= 11.5 ? 1 : 0));
+  // bar 7: the phase becomes height — SIGNAL rises into relief, letter by letter (left to right), then sinks
+  const relH = 0.16 * (E.outCubic(unit(12.0, 12.15, t)) - E.inOutCubic(unit(13.45, 14.0, t)));
+  const relief = relH > 1e-4 ? [relH, mix(-1.7, 1.75, E.inOutCubic(unit(12.0, 12.75, t))), 0.35, 0] : [0, 0, 1, 0];
+  const melt = E.inOutCubic(unit(14.0, 14.8, t));
+  const blur = 0.16 * melt, phase = 0.5 + 2.6 * melt, duty = 0.42 * (1 - melt);
+  const morph = E.inOutCubic(unit(14.6, 15.4, t));
+  const Kt = LEVELS * E.inOutCubic(unit(14.5, 15.4, t));
+  const sw = E.inOutCubic(unit(19.0, 19.6, t));
+  const front = t < 19.0 ? 4 : mix(3, -3, sw);
   return {
-    A, B, pulses: [], sag: [0, 4], sheet: [0, 1, 0, 0],
-    weave: [-1, 0, front, t < 5.95 ? 1 : 0],
-    inside: t >= 5.0 ? 1 : 0,
-    K: Kt, kOff: 0.5 * E.inOutCubic(unit(4.0, 5.0, t)) + 10 * E.inOutCubic(unit(5.0, 6.0, t)), sigP: [amount, stretch, split, blur], sigQ: [phase, duty, morph, wipeY], sweep,
+    A, B, pulses: [], sag: [0, 4], sheet: [0, 1, 0, 0], relief,
+    weave: [-1, 0, front, t < 19.95 ? 1 : 0], inside: t >= 18.0 ? 1 : 0,
+    K: Kt, kOff: 0.5 * E.inOutCubic(unit(16.0, 17.6, t)) + 10 * E.inOutCubic(unit(18.0, 20.0, t)),
+    sigP: [amount, stretch, split, blur], sigQ: [phase, duty, morph, wipeY], sweep: mix(-2.2, 2.2, sw),
   };
 }
-
-function fogAt(t) {                 // depth fade, only meaningful while the camera is low
-  const u = t > 7.5 ? t - DUR : t;
-  if (u < -0.45 || u > 2) return [30, 31];
-  const k = u < 0 ? sstep(-0.45, -0.05, u) : 1 - sstep(0.9, 1.8, u);
+function fogAt(t) {
+  const u = t > 37.5 ? t - DUR : t;
+  if (u < -0.45 || u > 8) return [30, 31];
+  const k = u < 0 ? sstep(-0.45, -0.05, u) : 1 - sstep(4.5, 7.0, u);
   return [mix(30, 4.2, k), mix(31, 7.2, k)];
 }
-function fieldState(t) {
-  let S;
-  if (t < 2.0) S = fieldOpening(t);
-  else if (t < 6.0 + 1e-9) S = fieldSignal(t);
-  else S = fieldEnd(t);
-  return Object.assign({
-    bg: INK, K: 0, sigP: [0, 1, 0, 0], sigQ: [0.5, 0, 0, 2], sweep: -9,
-    titP: [0, 0, 1, 0], titQ: [0, 0.03, 0, 0], ringW: 1.2, ringCol: PAPER, fog: fogAt(t),
-  }, S);
-}
 
-/* ----------------------------------------------------------------- final half bar: title -> thread
-   u = t - 15 (negative). From u = -0.25 the families are the opening's own functions. */
-const LT = 12, RSP = 0.026;          // title field: plateau level and ring spacing (world units)
+/* ----------------------------------------------------------------- V · title -> thread (u = t - 75) */
+const LT = 12, RSP = 0.026;
 const MERGES = [-0.25, -0.1875, -0.125, -0.0625];
 function fieldEnd(t) {
   const u = t - DUR;
-  const capU = FIELDS.tit.ascU;
-  const spT = capU / 16;
+  const capU = FIELDS.tit.ascU, spT = capU / 16;
   const open = E.inOutCubic(unit(-0.47, -0.36, u));
   const smear = 2.4 * E.inExpo(unit(-0.42, -0.26, u), 4);
   const dil = 0.06 * E.inExpo(unit(-0.38, -0.26, u), 3);
+  // the rings breathe outward on every beat of the title hold
   let ripple = 0;
-  for (const uk of [-0.75, -0.625]) { const tau = u - uk; if (tau > 0) ripple += (1 - Math.exp(-tau / 0.012)) * Math.exp(-tau / 0.07); }
-  const delta = RSP * 0.28 * ripple - LT * RSP * E.inExpo(unit(-0.5, -0.3, u), 3.5);
-  const ringA = u < -0.3 ? 1 : 0;
-  const O = fieldOpening(u);            // whip/sag/sheet + family A (single thread) from the opening
+  // (from beat 141 = 70.5 s: the monument hands over at 70.25 with the rings at rest)
+  for (let b = 1; b < 9; b++) { const uk = -5.0 + b * 0.5, tau = u - uk; if (tau > 0) ripple += (1 - Math.exp(-tau / 0.012)) * Math.exp(-tau / 0.09) * (b === 1 ? 1.4 : 0.8); }
+  const delta = RSP * 0.3 * ripple - LT * RSP * E.inExpo(unit(-0.5, -0.3, u), 3.5);
+  const O = fieldOpening(u);
   let B;
-  if (u < -0.25) {
-    // solid letters made of 16 horizontal B lines, masked by the title; thinning into stripes
-    B = fam({ ang: 0, mode: 1, sp: spT, invS: 1, v0: spT / 2, W: 16 * spT, hw: mix(0.5, 1.0, open), col: PAPER });
-  } else {
-    let m = 4; for (const tm of MERGES) m -= snap(u - tm, 0.055, 6);
-    B = fam({ ang: 0, mode: 0, W: 16 * spT, m, hw: 0.5, hwW: threadHW(m) * WPX, col: PAPER, gap: O.B.gap });
-  }
+  if (u < -0.25) B = fam({ ang: 0, mode: 1, sp: spT, invS: 1, v0: spT / 2, W: 16 * spT, hw: mix(0.5, 1.0, open), col: PAPER });
+  else { let m = 4; for (const tm of MERGES) m -= snap(u - tm, 0.055, 6); B = fam({ ang: 0, mode: 0, W: 16 * spT, m, hw: 0.5, hwW: threadHW(m) * WPX, col: PAPER, gap: O.B.gap }); }
   const A = fam(Object.assign({}, O.A, { W: 16 * spT, m: 0, hwW: mix(1.5, threadHW(0), E.inOutCubic(unit(-0.25, 0, u))) * WPX, gap: u < -0.25 ? 0 : O.A.gap }));
-  return {
-    A, B, pulses: O.pulses, sag: O.sag, sheet: O.sheet,
-    weave: [0, 0, 0, u < -0.25 ? 2 : 0],
-    titP: [u < -0.25 ? 1 : 0, smear, open, dil], titQ: [ringA, RSP, delta, LT - 1], ringW: 1.2, inside: 1,
-  };
+  return { A, B, pulses: O.pulses, sag: O.sag, sheet: O.sheet, weave: [0, 0, 0, u < -0.25 ? 2 : 0],
+    titP: [u < -0.25 ? 1 : 0, smear, open, dil], titQ: [u < -0.3 ? 1 : 0, RSP, delta, LT - 1], ringW: 1.2, inside: 1 };
+}
+function fieldState(t) {
+  let S;
+  if (t < 8.0) S = fieldOpening(t);
+  else if (t < 20.0 + 1e-9) S = fieldSignal(t);
+  else S = fieldEnd(t);
+  return Object.assign({ bg: INK, K: 0, sigP: [0, 1, 0, 0], sigQ: [0.5, 0, 0, 2], sweep: -9, titP: [0, 0, 1, 0], titQ: [0, 0.03, 0, 0], ringW: 1.2, ringCol: PAPER, fog: fogAt(t) }, S);
 }
 
 /* ----------------------------------------------------------------- captions */
 const CAPTIONS = [
-  { t0: -0.25, t1: 2.0, n: '01', w: 'THREAD' },
-  { t0: 2.0, t1: 4.0, n: '02', w: 'SIGNAL' },
-  { t0: 4.0, t1: 8.0, n: '03', w: 'TERRAIN' },
-  { t0: 8.75, t1: 12.0, n: '04', w: 'SYSTEM', ink: true },
+  { t0: -0.25, t1: 8.0, n: '01', w: 'THREAD' },
+  { t0: 8.0, t1: 16.0, n: '02', w: 'SIGNAL' },
+  { t0: 16.0, t1: 30.0, n: '03', w: 'TERRAIN' },
+  { t0: 32.75, t1: 46.0, n: '04', w: 'SYSTEM', ink: true },
+  { t0: 48.0, t1: 60.0, n: '05', w: 'NETWORK', ink: true },
 ];
-function drawCaptions(t, col) {
+function drawCaptions(t) {
   const x = 72, y = 76, size = 14, lh = 20;
   for (const tt of [t, t - DUR]) for (const C of CAPTIONS) {
     if (tt < C.t0 - 0.01 || tt > C.t1 + 0.4) continue;
-    const str = C.n + '  ' + C.w;
-    const glyph = (i, n) => {
-      const din = spring(tt - C.t0 - i * 0.022, 34), dout = spring(tt - C.t1 - i * 0.018, 34);
-      return { dy: (1 - din) * 1.35 - dout * 1.35, a: 1 };
-    };
-    const cc = C.ink ? INK : col;
-    Text.screen('text', str, x, y, size, [cc[0], cc[1], cc[2], 0.92], { track: 0.16, glyph, clip: [-50, -lh * 0.78 / size * size, 4000, lh * 0.3] });
+    const glyph = (i) => { const din = spring(tt - C.t0 - i * 0.022, 34), dout = spring(tt - C.t1 - i * 0.018, 34); return { dy: (1 - din) * 1.35 - dout * 1.35 }; };
+    const cc = C.ink ? INK : PAPER;
+    Text.screen('text', C.n + '  ' + C.w, x, y, size, C4(cc, 0.92), { track: 0.16, glyph, clip: [-50, -lh * 0.78, 4000, lh * 0.3] });
+  }
+  // title subtitle (bar 36-37)
+  if (t > 70.3 && t < 73.6) {
+    const str = 'THREAD · SIGNAL · TERRAIN · SYSTEM · NETWORK';
+    const glyph = (i, n) => { const din = spring(t - 70.5 - i * 0.012, 30), dout = spring(t - 73.0 - (n - i) * 0.008, 30); return { dy: (1 - din) * 1.4 - dout * 1.4 }; };
+    Text.screen('text', str, 960, 912, 15, C4(PAPER, 0.9), { track: 0.3, align: 'center', glyph, clip: [-2000, -21, 2000, 6] });
   }
 }
 
-/* ----------------------------------------------------------------- bar 4: terraces */
+/* ----------------------------------------------------------------- frame dispatcher */
+function renderFrame(t) {
+  const cam = camAt(t);
+  gl.viewport(0, 0, W, H);
+  gl.clearColor(INK[0], INK[1], INK[2], 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
+  if (t < 20.0 || t >= 70.25) FieldPlane.draw(cam, fieldState(t), TEX);
+  else if (t < 31.0) renderTerrain(t, cam);
+  else if (t < 62.0) renderSystem(t, cam);
+  else renderMonument(t, cam);
+  drawCaptions(t);
+  Text.flush(cam);
+}
+
+/* ---- scene_terrain.js ---- */
+/* =====================================================================
+   SCENE (75 s) — terrain: Movement II (extrusion, flight, tectonic shift)
+   and Movement V (the landscape becomes the word).
+   ===================================================================== */
 const TERR = {};
+const LIGHT = (() => { const a = [-0.95, 0.3], l = Math.hypot(a[0], a[1]); return [a[0] / l, a[1] / l]; })();
+const WALL_DARK = [0.085, 0.105, 0.56];
+const SHEET = [-24, -24, 24, 24];         // the paper is the ground: no visible edge from any camera
+const M_PER_LEVEL = 30;
+
+const tectAt = (t) => E.inOutCubic(unit(26.0, 27.6, t));        // landform A -> B
+const morphAt = (t) => E.outCubic(unit(62.0, 62.8, t));         // landform B -> letter field
+function fieldAt(x, y, t) {
+  let g = mix(gridSample(FIELDS.G, x, y), gridSample(FIELDS.G2, x, y), tectAt(t));
+  const m = morphAt(t);
+  return m <= 0 ? g : mix(g, gridSample(FIELDS.GL, x, y), m);
+}
+
 function sceneInit() {
-  const G = new Float32Array(GX * GY);
-  for (let k = 0; k < G.length; k++) G[k] = LEVELS * FIELDS.terr[k] + 0.5;
-  FIELDS.G = G;
-  const iso = Isobands();
-  const m = iso.build(G, LEVELS);
-  TERR.mesh = { verts: m.verts.slice(), segs: m.segs.slice(), nv: m.nv, ns: m.ns, nTri: m.nTri };
-  TERR.iso = iso;
-  buildHypso();
-  // title letter field: plateau LT inside the letters, a contour every RSP outward
+  const toLevels = (h) => { const G = new Float32Array(GX * GY); for (let k = 0; k < G.length; k++) G[k] = LEVELS * h[k] + 0.5; return G; };
+  FIELDS.G = toLevels(FIELDS.terr); FIELDS.G2 = toLevels(FIELDS.terr2);
+  const iso = Isobands(); TERR.iso = iso;
+  const keep = (m) => ({ verts: m.verts.slice(), segs: m.segs.slice(), nv: m.nv, ns: m.ns, nTri: m.nTri });
+  TERR.mesh1 = keep(iso.build(FIELDS.G, LEVELS));
+  TERR.mesh2 = keep(iso.build(FIELDS.G2, LEVELS));
   const GL = new Float32Array(GX * GY), sd = FIELDS.tit.G;
   for (let k = 0; k < GL.length; k++) GL[k] = clamp(LT - sd[k] / RSP, 0, LT + 0.5);
   FIELDS.GL = GL;
-  const ml = iso.build(GL, LT);
-  TERR.letters = { verts: ml.verts.slice(), segs: ml.segs.slice(), nv: ml.nv, ns: ml.ns, nTri: ml.nTri };
+  TERR.letters = keep(iso.build(GL, LT));
   TERR.mix = new Float32Array(GX * GY);
+  buildHypso();
+  if (typeof systemInit === 'function') systemInit();
 }
-function climaxMesh(t) {
-  const m = morphAt(t);
-  if (m >= 1) return [TERR.letters, 'letters'];
-  const G = FIELDS.G, GL = FIELDS.GL, M = TERR.mix;
-  for (let k = 0; k < M.length; k++) M[k] = G[k] + (GL[k] - G[k]) * m;
-  return [TERR.iso.build(M, LEVELS), 'morph' + t];
+function mixedMesh(A, B, s, L, key) {
+  const M = TERR.mix;
+  for (let k = 0; k < M.length; k++) M[k] = A[k] + (B[k] - A[k]) * s;
+  return [TERR.iso.build(M, L), key];
 }
-const LIGHT = (() => { const a = [-0.95, 0.3], l = Math.hypot(a[0], a[1]); return [a[0] / l, a[1] / l]; })();
-const WALL_DARK = [0.085, 0.105, 0.56];
-function tintOf(n, T) { return Math.pow(n / T.L, T.tint[1]) * T.tint[0]; }
+
+/* ----------------------------------------------------------------- II · terraces */
 function terrainLift(t) {
   const L = LEVELS;
-  const gamma = 1 + 0.32 * E.inOutCubic(unit(6.5, 7.05, t));
-  const Htop = 0.5 * (1 + 0.05 * hit(t - 7.0, 0.14) + 0.04 * hit(t - 7.5, 0.14));
+  const gamma = 1 + 0.32 * E.inOutCubic(unit(22.0, 23.0, t));
+  let pulse = 0; for (let b = 48; b < 60; b++) pulse += hit(t - b * 0.5, 0.14) * (b % 2 ? 0.025 : 0.045);
+  const Htop = 0.5 * (1 + pulse);
   return (n) => {
     if (n <= 0) return 0;
     const nn = Math.min(n, L);
-    const up = E.outCubic((t - 6.0 - 0.013 * nn) / 0.42);
-    const down = E.inOutCubic((t - 8.0 - 0.011 * (L - nn)) / 0.42);
+    const up = E.outCubic((t - 20.0 - 0.013 * nn) / 0.42);
+    const down = E.inOutCubic((t - 30.0 - 0.011 * (L - nn)) / 0.42);
     return Htop * Math.pow(nn / L, gamma) * up * (1 - down);
   };
 }
 function terraceState(t) {
-  const tint = E.inOutCubic(unit(6.05, 6.7, t)) * (1 - E.inOutCubic(unit(8.0, 8.5, t)));
+  const tint = E.inOutCubic(unit(20.05, 20.7, t)) * (1 - E.inOutCubic(unit(30.0, 30.5, t)));
   return {
-    L: LEVELS, lift: terrainLift(t), xf: (() => { const Lo = layoutAt(t); return [Lo.ox, Lo.oz, Lo.ms, 0]; })(),
+    L: LEVELS, lift: terrainLift(t), xf: [0, 0, 1, 0],
     capLo: INK, capHi: PAPER, tint: [tint, 2.4, LEVELS, 0.0],
     light: LIGHT, wallLit: [0.93, 0.915, 0.885], wallDark: WALL_DARK,
     strata: [0.5 / LEVELS / 3, 1.0, 0.55],
     lineW: 1.2, lineWIdx: 2.28, every: 5, lineCol: PAPER, lineColIdx: PAPER, lineAlpha: 1,
   };
 }
-window.__camCheck = (t0, t1, dt) => {
-  const out = [];
-  for (let t = t0; t <= t1 + 1e-9; t += dt) {
-    const c = camAt(t), e = c.eye, q = [e[0], -e[2]];
-    let h = 0;
-    if (Math.abs(q[0]) < MW && Math.abs(q[1]) < 1) { const T = terraceState(t); h = T.lift(clamp(Math.floor(gridSample(FIELDS.G, q[0], q[1])), 0, LEVELS)); }
-    out.push([+t.toFixed(3), +e[1].toFixed(3), +h.toFixed(3), +(e[1] - h).toFixed(3)]);
-  }
-  return out;
-};
-// remove there-and-back level excursions shorter than `w` samples (a section running along a contour)
 function deblip(lvs, w) {
   for (let pass = 0; pass < 2; pass++) for (let i = 1; i < lvs.length - 1; i++) if (lvs[i] !== lvs[i - 1]) {
     let j = i; while (j < lvs.length - 1 && lvs[j] === lvs[i]) j++;
@@ -1447,74 +1801,121 @@ function deblip(lvs, w) {
   return lvs;
 }
 // the thread draped over the terraces: a stepped profile along the section line
-function threadProfile(T, y, x0 = -MW - 0.4, x1 = MW + 0.4, n = 900) {
+function threadProfile(T, y, t, x0 = -MW - 0.4, x1 = MW + 0.4, n = 900) {
   const pts = [], lvs = [];
-  for (let i = 0; i <= n; i++) {
-    const x = mix(x0, x1, i / n), inMap = x > -MW && x < MW;
-    lvs.push(inMap ? clamp(Math.floor(gridSample(FIELDS.G, x, y)), 0, T.L) : -1);
-  }
-  // where the thread runs along a contour it would flicker between two levels: hold the previous level through short blips
+  for (let i = 0; i <= n; i++) { const x = mix(x0, x1, i / n), inMap = x > -MW && x < MW; lvs.push(inMap ? clamp(Math.floor(fieldAt(x, y, t)), 0, T.L) : -1); }
   deblip(lvs, 60);
   let prev = null;
   for (let i = 0; i <= n; i++) {
-    const x = mix(x0, x1, i / n);
-    const lv = lvs[i];
-    const h = lv >= 0 ? T.lift(lv) : -0.003;
+    const x = mix(x0, x1, i / n), h = lvs[i] >= 0 ? T.lift(lvs[i]) : -0.003;
     if (prev !== null && Math.abs(prev - h) > 1e-6) pts.push([x, prev, -y]);
     pts.push([x, h, -y]); prev = h;
   }
   return pts;
 }
-const SHEET = [-2.6, -1.7, 4.4, 2.3];   // paper sheet extent (x0, z0, x1, z1)
-
-/* ----------------------------------------------------------------- bar 7: the landscape becomes the word */
-const morphAt = (t) => E.outCubic(unit(12.0, 12.8, t));
-function fieldAt(x, y, t) {
-  const a = gridSample(FIELDS.G, x, y), m = morphAt(t);
-  return m <= 0 ? a : mix(a, gridSample(FIELDS.GL, x, y), m);
+function terrainMesh(t) {
+  const s = tectAt(t);
+  if (s <= 0) return [TERR.mesh1, 'm1'];
+  if (s >= 1) return [TERR.mesh2, 'm2'];
+  return mixedMesh(FIELDS.G, FIELDS.G2, s, LEVELS, 'tect' + t);
 }
+function renderTerrain(t, cam) {
+  Fills.rectXZ(SHEET[0], SHEET[1], SHEET[2], SHEET[3], -0.004, C4(PAPER));
+  Fills.rectXZ(-MW, -1, MW, 1, -0.0015, C4(INK));
+  Fills.flush(cam);
+  const T = terraceState(t);
+  const [mesh, key] = terrainMesh(t);
+  Terraces.upload(mesh, key);
+  Terraces.draw(cam, T);
+  Lines.begin();
+  if (t < 30.0) Lines.poly(threadProfile(T, SP / 2, t), C4(ORANGE), 3.0);
+  else drawSheet(t, cam, T);
+  Fills.flush(cam);
+  Solids.flush(cam);
+  Glyph3D.flush(cam);
+  Lines.flush(cam, true, 0.0012);
+}
+
+/* ----------------------------------------------------------------- V · the monument */
 function climaxLift(t) {
-  const H = 0.07, comp = 1 - E.inOutCubic(unit(13.42, 14.0, t));
-  const slam = 0.17 * E.outExpo(unit(12.5, 12.62, t), 6);
+  const H = 0.07, comp = 1 - E.inOutCubic(unit(68.6, 70.0, t));
+  const slam = 0.17 * E.outExpo(unit(62.5, 62.62, t), 6);
+  let pulse = 0; for (let b = 126; b < 136; b++) pulse += hit(t - b * 0.5, 0.12) * 0.02;
   return (n) => {
     if (n <= 0) return 0;
     const ne = Math.min(n, LT + 1);
-    const rise = E.outExpo(unit(12.0 + 0.011 * ne, 12.4 + 0.011 * ne, t), 5);
-    return (ne * H * rise + (n >= LT ? slam : 0)) * comp;
+    const rise = E.outExpo(unit(62.0 + 0.011 * ne, 62.4 + 0.011 * ne, t), 5);
+    return (ne * H * (1 + pulse) * rise + (n >= LT ? slam : 0)) * comp;
   };
 }
 function climaxState(t) {
   return {
-    L: LT, lift: climaxLift(t), xf: (() => { const Lo = layoutAt(t); return [Lo.ox, Lo.oz, Lo.ms, 0]; })(),
-    capLo: INK, capHi: PAPER, tint: [0.16 * E.inOutCubic(unit(12.0, 12.4, t)) * (1 - E.inOutCubic(unit(13.42, 14.0, t))), 1.0, LT, E.inOutCubic(unit(12.12, 12.5, t))],
+    L: LT, lift: climaxLift(t), xf: [0, 0, 1, 0],
+    capLo: INK, capHi: PAPER,
+    tint: [0.16 * E.inOutCubic(unit(62.0, 62.4, t)) * (1 - E.inOutCubic(unit(68.6, 70.0, t))), 1.0, LT, E.inOutCubic(unit(62.12, 62.5, t))],
     light: LIGHT, wallLit: [0.93, 0.915, 0.885], wallDark: WALL_DARK,
     strata: [0.07 / 4, 1.0, 0.6],
-    lineW: 1.2, lineWIdx: mix(2.28, 1.2, E.inOutCubic(unit(12.0, 12.35, t))), every: 5, lineCol: PAPER, lineColIdx: PAPER, lineAlpha: 1,
-    skipLevel: LT, skipAmt: E.inOutCubic(unit(12.15, 12.55, t)),
+    lineW: 1.2, lineWIdx: mix(2.28, 1.2, E.inOutCubic(unit(62.0, 62.35, t))), every: 5, lineCol: PAPER, lineColIdx: PAPER, lineAlpha: 1,
+    skipLevel: LT, skipAmt: E.inOutCubic(unit(62.15, 62.55, t)),
   };
 }
-const threadY = (t) => (t < 12 ? 0 : 0.5 * climaxLift(t)(LT));
-const M_PER_LEVEL = 30;
-
-/* ----------------------------------------------------------------- bars 5-6: interface */
-function layoutAt(t) {
-  const k = spring(t - 10.5, 16) - spring(t - 12.0, 13);
-  const ms = 1 - 0.17 * k;                          // map compresses...
-  const ox = -MW * (1 - ms), oz = -(1 - ms);        // ...anchored at its top-left corner
-  const mx1 = -MW + 2 * MW * ms, mz1 = -1 + 2 * ms;
-  const chartTop = mz1 + UI_GUT, chartBot = UI_BOT; // ...and the section chart takes the room (vertical exaggeration)
-  const colX = mx1 + UI_GUT;
-  return { ms, ox, oz, mx0: -MW, mx1, mz0: -1, mz1, chartTop, chartBot, chartH: chartBot - chartTop, colX, colX1: UI_RIGHT,
-           m2w: (x, z) => [x * ms + ox, z * ms + oz], lz: (n) => chartBot - (n / LEVELS) * (chartBot - chartTop) };
+const threadY = (t) => 0.5 * climaxLift(t)(LT);
+function climaxMesh(t) {
+  const m = morphAt(t);
+  if (m >= 1) return [TERR.letters, 'letters'];
+  if (m <= 0) return [TERR.mesh2, 'm2'];
+  return mixedMesh(FIELDS.G2, FIELDS.GL, m, LEVELS, 'morph' + t);
 }
-// section line position (map-local z) and the scan choreography of bar 6
+function renderMonument(t, cam) {
+  Fills.rectXZ(SHEET[0], SHEET[1], SHEET[2], SHEET[3], -0.004, C4(PAPER));
+  Fills.rectXZ(-MW, -1, MW, 1, -0.0015, C4(INK));
+  Fills.flush(cam);
+  const T = climaxState(t);
+  const [mesh, key] = climaxMesh(t);
+  Terraces.upload(mesh, key);
+  Terraces.draw(cam, T);
+  Lines.begin();
+  // the thread runs through the letters: draw only the spans outside them
+  const yT = 0.002 + threadY(t), m = morphAt(t), n = 600;
+  let run = null;
+  for (let i = 0; i <= n; i++) {
+    const x = mix(-MW, MW, i / n);
+    const inside = m > 0.5 && gridSample(FIELDS.tit.G, x, 0) < 0;
+    const p = [x, yT, 0];
+    if (!inside) { if (!run) run = p; if (i === n) Lines.seg(run, p, C4(ORANGE), 3.0); }
+    else if (run) { Lines.seg(run, p, C4(ORANGE), 3.0); run = null; }
+  }
+  Lines.flush(cam, true, 0.0012);
+}
+
+/* ---- scene_system.js ---- */
+/* =====================================================================
+   SCENE (75 s) — Movement III (the interface as physical slabs, exploded in 3D)
+   and Movement IV (the map subdivides into a network of module towers).
+   ===================================================================== */
+const CT = 1 + UI_GUT, CB = UI_BOT;                       // chart z-range (flat layout)
+const COLX = MW + UI_GUT;                                  // right column x
+const lz = (n) => CB - (n / LEVELS) * (CB - CT);
+const HYPSO = [];
+function buildHypso() {
+  const cnt = new Float64Array(LEVELS + 2);
+  for (let k = 0; k < FIELDS.G2.length; k++) cnt[clamp(Math.floor(FIELDS.G2[k]), 0, LEVELS)]++;
+  let acc = 0; const cum = new Array(LEVELS + 1);
+  for (let n = LEVELS; n >= 0; n--) { acc += cnt[n]; cum[n] = acc; }
+  for (let n = 0; n <= LEVELS; n++) HYPSO[n] = cum[n] / cum[1];
+}
+
+/* ----------------------------------------------------------------- section line choreography (map-local z) */
 function sectionZ(t) {
-  let z = -SP / 2;
-  const jumps = [[10.0, -0.44], [11.0, 0.36], [11.5, -0.52], [11.625, -0.18], [11.75, 0.18], [11.875, 0.5], [12.0, 0.0]];
-  let prev = z;
-  for (const [tj, zj] of jumps) { z += (zj - prev) * spring(t - tj, tj >= 11.5 ? 46 : 20); prev = zj; }
+  let z = -SP / 2, prev = z;
+  const jumps = [[36.0, -0.44], [37.0, 0.36], [42.0, -0.52], [42.125, -0.18], [42.25, 0.18], [42.375, 0.5], [43.0, 0.0],
+                 [60.5, -0.55], [60.625, -0.2], [60.75, 0.25], [60.875, 0.55], [61.5, 0.0]];
+  for (const [tj, zj] of jumps) { z += (zj - prev) * spring(t - tj, (tj % 1 === 0 || tj === 61.5) ? 20 : 46); prev = zj; }
   return z;
 }
+const secLetter = (t) => (t >= 36 ? 1 : 0) + (t >= 37 ? 1 : 0) + [42.0, 42.125, 42.25, 42.375].reduce((a, k) => a + (t >= k ? 1 : 0), 0) + (t >= 43 ? 1 : 0);
+const secWheel = (t) => spring(t - 36, 26) + spring(t - 37, 26) + [42.0, 42.125, 42.25, 42.375].reduce((a, k) => a + spring(t - k, 40), 0) + spring(t - 43, 26);
+
 function crossings(z, t, n = 700) {
   const y = -z, out = [], gs = [], ls = [];
   for (let i = 0; i <= n; i++) { const x = clamp(-MW + (2 * MW * i) / n, -MW + 1e-4, MW - 1e-4), g = fieldAt(x, y, t); gs.push(g); ls.push(clamp(Math.floor(g), 0, LEVELS)); }
@@ -1523,277 +1924,358 @@ function crossings(z, t, n = 700) {
     if (ls[i] === ls[i - 1]) continue;
     const pl = ls[i - 1], l = ls[i], lev = Math.max(l, pl), gp = gs[i - 1], g = gs[i];
     const x0 = -MW + (2 * MW * (i - 1)) / n, x1 = -MW + (2 * MW * i) / n;
-    const f = (lev - gp) / (g - gp || 1);
-    out.push({ x: x0 + (x1 - x0) * clamp(f), from: pl, to: l, lev });
+    out.push({ x: x0 + (x1 - x0) * clamp((lev - gp) / (g - gp || 1)), from: pl, to: l, lev });
   }
   return out;
 }
-function profilePts(cr) {      // stepped profile in (x, level) pairs
-  const pts = [[-MW, 0]];
-  for (const c of cr) { pts.push([c.x, c.from]); pts.push([c.x, c.to]); }
-  pts.push([MW, 0]);
-  return pts;
-}
-function straightPts(cr) {     // data-point polyline, same vertex count as the stepped one
-  const pts = [[-MW, 0]];
-  for (const c of cr) { pts.push([c.x, c.lev]); pts.push([c.x, c.lev]); }
-  pts.push([MW, 0]);
-  return pts;
-}
-const HYPSO = [];
-function buildHypso() {
-  const cnt = new Float64Array(LEVELS + 2);
-  for (let k = 0; k < FIELDS.G.length; k++) cnt[clamp(Math.floor(FIELDS.G[k]), 0, LEVELS)]++;
-  let acc = 0; const cum = new Array(LEVELS + 1);
-  for (let n = LEVELS; n >= 0; n--) { acc += cnt[n]; cum[n] = acc; }
-  for (let n = 0; n <= LEVELS; n++) HYPSO[n] = cum[n] / cum[1];
-}
-const C4 = (c, a = 1) => [c[0], c[1], c[2], a];
-function digitsRoll(value, nd) {          // odometer wheel positions, most significant first
+const profilePts = (cr) => { const p = [[-MW, 0]]; for (const c of cr) { p.push([c.x, c.from]); p.push([c.x, c.to]); } p.push([MW, 0]); return p; };
+const straightPts = (cr) => { const p = [[-MW, 0]]; for (const c of cr) { p.push([c.x, c.lev]); p.push([c.x, c.lev]); } p.push([MW, 0]); return p; };
+function digitsRoll(value, nd) {
   const out = [];
   for (let i = nd - 1; i >= 0; i--) {
     const p = value / Math.pow(10, i);
-    if (i === 0) { out.push(p); continue; }
-    const lower = (value % Math.pow(10, i)) / Math.pow(10, i);
-    out.push(Math.floor(p) + E.inOutCubic(unit(0.9, 1.0, lower)));
+    const lower = i === 0 ? value % 1 : (value % Math.pow(10, i)) / Math.pow(10, i);
+    out.push(Math.floor(p) + E.inOutCubic(unit(i === 0 ? 0.75 : 0.9, 1.0, lower)));
   }
   return out;
 }
-function drawInterface(t, cam) {
-  if (t < 8.0 || t > 14.3) return;
-  const Lo = layoutAt(t), L = LEVELS;
-  const zs = sectionZ(t);
-  const [, zsw] = Lo.m2w(0, zs);
+
+/* ----------------------------------------------------------------- slab state (III) */
+function slabs(t) {
+  const em = E.inOutCubic(unit(34.0, 34.8, t)), er = E.inOutCubic(unit(34.1, 34.9, t)), ec = E.inOutCubic(unit(34.2, 35.0, t));
+  const dock = E.inOutCubic(unit(44.35, 45.0, t));
+  const fold = (a, b) => E.inOutCubic(unit(a, b, t)) - E.inOutCubic(unit(44.0, 44.4, t));
+  return {
+    yM: mix(0.62 * em, 0.25, E.inOutCubic(unit(44.5, 45.2, t))), thM: mix(0.05, 0.25, E.inOutCubic(unit(44.3, 44.9, t))),
+    yR: 0.34 * er, yC: 0.14 * ec, E: em,
+    hC: fold(40.0, 40.7) * PI / 2, hR: 0,
+    dock, fin: 0.075 * ec * (1 - dock),
+    rise: E.inOutCubic(unit(34.1, 34.8, t)) * (1 - E.inOutCubic(unit(43.9, 44.35, t))),   // drums out of / back into the column
+  };
+}
+// point mappers: flat layout -> world
+function hinge(p, yb, zb, a) {           // rotate about the line (y = yb, z = zb), local y measured from the slab top
+  const w = p[2] - zb, c = Math.cos(a), s = Math.sin(a);
+  return [p[0], yb + p[1] * c - w * s, zb + w * c + p[1] * s];
+}
+function chartXf(S) {
+  return (p) => {
+    let q = hinge(p, S.yC, CB, S.hC);
+    if (S.dock > 0) q = [q[0], mix(q[1], q[1] - S.yC + S.yM - 0.16, S.dock), mix(q[2], q[2] - (CT + CB) / 2 + 0.2, S.dock)];
+    return q;
+  };
+}
+function colXf(S) {
+  return (p) => {
+    let q = hinge(p, S.yR, CB, S.hR);
+    if (S.dock > 0) { const k = mix(1, 0.62, S.dock); q = [mix(q[0], 0.3 + (q[0] - COLX) * k, S.dock), mix(q[1], q[1] - S.yR + S.yM - 0.2, S.dock), mix(q[2], q[2] * k - 0.05, S.dock)]; }
+    return q;
+  };
+}
+const dirXf = (f) => (o, v) => sub3(f(add3(o, v)), f(o));       // linear part of an affine mapper (o is irrelevant)
+function frameAt(f, p) {                                         // 4x4 basis of the affine mapper f, origin at local point p
+  const o = f(p), d = dirXf(f), ex = d(p, [1, 0, 0]), ey = d(p, [0, 1, 0]), ez = d(p, [0, 0, 1]);
+  return new Float32Array([ex[0], ex[1], ex[2], 0, ey[0], ey[1], ey[2], 0, ez[0], ez[1], ez[2], 0, o[0], o[1], o[2], 1]);
+}
+const WALL_PAPER = [0.93, 0.915, 0.885, 1];
+
+/* ----------------------------------------------------------------- the sheet: chart, wires, probe, column (30–45 s) */
+function drawSheet(t, cam, Tterr) {
+  const S = slabs(t), L = LEVELS;
   const ink = (a) => C4(INK, a), paper = (a) => C4(PAPER, a), orange = (a) => C4(ORANGE, a), cobalt = (a) => C4(COBALT, a);
-  const cr = crossings(zs, t);
+  const MX = (p) => [p[0], p[1] + S.yM, p[2]];
+  const CX = chartXf(S), RX = colXf(S);
   const Y = 0.002;
-  // climax: the chart hinges up about its bottom edge, the right column about its left edge
-  const fold = E.outExpo(unit(12.0, 12.42, t), 6) * PI / 2;
-  const cF = Math.cos(fold), sF = Math.sin(fold);
-  const CH = (p) => { const w = p[2] - Lo.chartBot; return [p[0], p[1] * cF - w * sF, Lo.chartBot + w * cF + p[1] * sF]; };
-  const CHd = [0, -sF, cF];                     // chart "down" vector
-  const RC = (p) => { const e = p[0] - Lo.colX; return [Lo.colX + e * cF - p[1] * sF, p[1] * cF + e * sF, p[2]]; };
-  const RCr = [cF, sF, 0];                      // column "right" vector
-  const quadC = (a, b, c, d, col) => Fills.quad(CH(a), CH(b), CH(c), CH(d), col);
-  const yT = threadY(t);
-  // -------- the thread on the map (section line); in the climax it rises to run through the letters
-  const trim = E.inOutCubic(unit(8.1, 8.7, t));
+  const zs = sectionZ(t), cr = crossings(zs, t);
+  const chartVis = 1 - unit(44.7, 45.0, t);
+  // ---- the thread on the map (section line)
+  const trim = E.inOutCubic(unit(30.1, 30.7, t));
   const ext = mix(MW + 0.6, MW, trim);
-  const xa = Lo.m2w(-ext, zs)[0], xb = Lo.m2w(ext, zs)[0];
-  if (t < 12.0) Lines.seg([xa, Y + yT, zsw], [xb, Y + yT, zsw], orange(1), 3.0);
-  else {
-    // the thread runs through the letters: draw only the spans where it is outside them
-    const m = morphAt(t), n = 600; let run = null;
-    for (let i = 0; i <= n; i++) {
-      const x = mix(-MW, MW, i / n);
-      const inside = m > 0.5 && gridSample(FIELDS.tit.G, x, -zs) < 0;
-      const p = [Lo.m2w(x, 0)[0], Y + yT, zsw];
-      if (!inside) { if (!run) run = p; if (i === n) Lines.seg(run, p, orange(1), 3.0); }
-      else if (run) { Lines.seg(run, p, orange(1), 3.0); run = null; }
-    }
-  }
-  if (t > 13.9) return;
-  // -------- ghost profile: stands where the terrain was, folds flat, slides into the chart, straightens
-  const fl = E.inOutCubic(unit(8.42, 8.78, t));
-  const slide = E.inOutExpo(unit(8.72, 9.12, t), 6);
-  const straight = E.inOutCubic(unit(9.25, 9.6, t));
-  const chartScale = E.inOutCubic(unit(8.4, 8.8, t));
+  Lines.seg(MX([-ext, Y, zs]), MX([ext, Y, zs]), orange(1), 3.0);
+  // ---- ghost profile: stands where the terrain was, folds flat, slides into the chart, straightens; then extrudes as a fin
+  const fl = E.inOutCubic(unit(30.42, 30.78, t)), slide = E.inOutExpo(unit(30.72, 31.12, t), 6);
+  const straight = E.inOutCubic(unit(31.25, 31.6, t)), chartScale = E.inOutCubic(unit(30.4, 30.8, t));
   const st = profilePts(cr), sp = straightPts(cr);
-  const h3 = (n) => 0.5 * Math.pow(n / L, 1.32);
-  const hc = (n) => (n / L) * Lo.chartH;
-  const prof = st.map((p, i) => {
-    const lev = mix(p[1], sp[i][1], straight);
-    const h = mix(h3(lev), hc(lev), chartScale);
-    const [x] = Lo.m2w(p[0], 0);
-    const phi = fl * PI / 2;
-    const base = mix(zsw, Lo.chartBot, slide);
-    const q = [x, h * Math.cos(phi) + Y * 2, base - h * Math.sin(phi)];
-    return slide >= 1 ? CH(q) : q;
-  });
-  // black section fill (the cut face of the block) sweeps in left to right
-  const reveal = E.inOutCubic(unit(9.25, 9.7, t));
-  if (reveal > 0) {
-    const xr = mix(-MW, MW, reveal);
-    for (let i = 0; i + 1 < st.length; i++) {
-      const la = st[i][0], lb = st[i + 1][0];
-      if (la > xr) break;
-      const lva = mix(st[i][1], sp[i][1], straight), lvb = mix(st[i + 1][1], sp[i + 1][1], straight);
-      const f = lb > xr ? (xr - la) / (lb - la || 1) : 1;
-      const ax = Lo.m2w(la, 0)[0], bx = Lo.m2w(mix(la, lb, f), 0)[0];
-      const az = Lo.lz(lva), bz = Lo.lz(mix(lva, lvb, f));
-      quadC([ax, Y, az], [bx, Y, bz], [bx, Y, Lo.chartBot], [ax, Y, Lo.chartBot], ink(1));
-    }
-  }
-  // chart gridlines = contour levels; index levels labelled in metres
-  const grid = E.outCubic(unit(8.9, 9.35, t));
-  if (grid > 0) {
-    const x0 = Lo.m2w(-MW, 0)[0], x1 = Lo.m2w(MW, 0)[0];
-    for (let n = 0; n <= L; n++) {
-      const z = Lo.lz(n), idx = n % 5 === 0;
-      const g = clamp(grid * 1.6 - n / L * 0.6);
-      Lines.seg(CH([x0, Y, z]), CH([mix(x0, x1, g), Y, z]), ink(idx ? 0.42 : 0.14), idx ? 1.0 : 0.8);
-      if (idx && g > 0.05) {
-        const sz = 11 / UI_S;
-        Text.world('text', String(n * M_PER_LEVEL), CH([x0 - 8 / UI_S, 0.003, z + sz * 0.36]), [1, 0, 0], CHd, sz, ink(0.75 * g), { align: 'right', track: 0.04 });
-      }
-    }
-  }
-  // projection lines: contour x thread intersections drop to their level -> data points
-  const drop0 = 8.95;
-  cr.forEach((c) => {
-    const [x] = Lo.m2w(c.x, 0);
-    const z1 = Lo.lz(c.lev);
-    const tk = drop0 + Math.floor((c.x + MW) / (2 * MW) * 8) * 0.0625;
-    const d = snap(t - tk, 0.16, 6);
-    if (d <= 0) return;
-    const zEnd = mix(zsw, z1, d);
-    const zMapEdge = Lo.m2w(0, 1)[1];
-    if (fold <= 0) {
-      Lines.seg([x, Y, zsw], [x, Y, Math.min(zEnd, zMapEdge)], paper(0.55), 1.0);       // over the black map
-      if (zEnd > zMapEdge) Lines.seg([x, Y, zMapEdge], [x, Y, zEnd], ink(0.5), 1.0);   // over the paper
-    } else {
-      Lines.seg([x, Y + yT, zsw], CH([x, Y, z1]), ink(0.5 * cF + 0.25), 1.0);           // strings to the standing wall
-    }
-    if (d > 0.98) { const s = 2.6 / UI_S; quadC([x - s, Y * 1.5, z1 - s], [x + s, Y * 1.5, z1 - s], [x + s, Y * 1.5, z1 + s], [x - s, Y * 1.5, z1 + s], c.lev % 5 === 0 ? orange(1) : ink(1)); }
-  });
-  Lines.poly(prof, orange(1), mix(3.0, 2.4, straight));
-  // -------- probe: races along the thread on every beat (ping-pong), cursor into the chart
-  const pr = E.outCubic(unit(9.45, 9.75, t)) * (1 - E.inOutCubic(unit(11.9, 12.1, t)));
-  let xp = -MW;
-  // the probe sweeps the island between its coastline crossings on the current section
-  const xl = cr.length ? cr[0].x + 0.03 : -1.2, xr = cr.length ? cr[cr.length - 1].x - 0.03 : 1.2;
-  if (t > 9.5) { const ph = (t - 9.5) / 0.5, k = Math.floor(ph), f = E.inOutCubic(ph - k); const a = k % 2 === 0 ? f : 1 - f; xp = mix(xl, xr, a); }
-  else xp = xl;
-  const xpe = xp;
-  const gp = fieldAt(xpe, -zs, t), lvp = clamp(Math.floor(gp), 0, L);
-  const elev = Math.max(0, (gp - 0.5)) * M_PER_LEVEL;
-  if (pr > 0) {
-    const [x] = Lo.m2w(xpe, 0);
-    const zc = Lo.lz(Math.max(0, gp - 0.5));
-    const s = 5 / UI_S;
-    Lines.seg([x, Y, zsw], [x, Y, zc], cobalt(pr), 1.5);
-    Fills.rectXZ(x - s, zsw - s, x + s, zsw + s, Y * 2, cobalt(pr));
-    Fills.rectXZ(x - s, zc - s, x + s, zc + s, Y * 2, cobalt(pr));
-  }
-  // -------- right column: elevation numerals, probe coordinates, hypsometry
-  const col = E.outCubic(unit(9.05, 9.35, t));
-  if (col > 0) {
-    const cx = Lo.colX, capU = 0.47, size = capU / Text.capHeight('display');
-    const top = -1 + 18 / UI_S;
-    const TW = (fk, str, x, z, sz, c, o) => Text.world(fk, str, RC([x, 0.003, z]), RCr, [0, 0, 1], sz, c, o);
-    TW('text', 'ELEVATION', cx, top + 11 / UI_S, 12 / UI_S, ink(col), { track: 0.14 });
-    TW('text', 'M', UI_RIGHT, top + 11 / UI_S, 12 / UI_S, ink(col), { track: 0.14, align: 'right' });
-    Lines.seg(RC([cx, Y, top + 22 / UI_S]), RC([mix(cx, UI_RIGHT, col), Y, top + 22 / UI_S]), ink(1), 1.0);
-    const val = mix(0, elev, E.outCubic(unit(9.2, 9.7, t)));
-    const wheels = digitsRoll(val, 3);
-    const cell = Text.width('display', '0', size) * 1.02;
-    const base = top + 40 / UI_S + capU;
-    const roll = 1.3 * capU / size;               // wheel pitch in em
-    const capEm = capU / size;
-    wheels.forEach((w, i) => {
-      const x = cx + i * cell;
-      const d0 = Math.floor(w), f = w - d0;
-      for (const [dg, off] of [[d0, -f], [d0 + 1, 1 - f]]) {
-        const ch = String(((dg % 10) + 10) % 10);
-        const gw = Text.width('display', ch, size);
-        // entry from below on first appearance
-        const enter = 1 - E.outExpo(unit(9.05 + i * 0.04, 9.27 + i * 0.04, t), 5);
-        TW('display', ch, x + (cell - gw) / 2, base, size, ink(1), {
-          glyph: () => ({ dy: (off + enter) * roll }), clip: [-1, -capU * 1.06, 99, capU * 0.1] });
-      }
+  const h3 = (n) => 0.5 * Math.pow(n / L, 1.32), hcz = (n) => (n / L) * (CB - CT);
+  const levAt = (i) => mix(st[i][1], sp[i][1], straight);
+  if (chartVis > 0) {
+    const prof = st.map((p, i) => {
+      const lev = levAt(i), h = mix(h3(lev), hcz(lev), chartScale), phi = fl * PI / 2, base = mix(zs, CB, slide);
+      const q = [p[0], h * Math.cos(phi) + Y * 2 + (slide >= 1 ? S.fin : 0), base - h * Math.sin(phi)];
+      return slide >= 1 ? CX(q) : q;
     });
-    const small = 12 / UI_S;
-    const fmt = (v) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2);
-    const yl = base + 34 / UI_S;
-    TW('text', 'PROBE', cx, yl, small, ink(col * 0.6), { track: 0.14 });
-    TW('text', 'X ' + fmt(xpe / MW), cx + 84 / UI_S, yl, small, ink(col), { track: 0.1 });
-    TW('text', 'Y ' + fmt(zs), cx + 190 / UI_S, yl, small, ink(col), { track: 0.1 });
-    TW('text', 'L ' + String(lvp).padStart(2, '0'), cx + 296 / UI_S, yl, small, orange(col), { track: 0.1 });
+    // black section silhouette = the cut face of the block; extrudes into a solid fin when the system explodes
+    const reveal = E.inOutCubic(unit(31.25, 31.7, t));
+    if (reveal > 0) {
+      const xr = mix(-MW, MW, reveal), fin = S.fin;
+      for (let i = 0; i + 1 < st.length; i++) {
+        const la = st[i][0], lb = st[i + 1][0]; if (la > xr) break;
+        const f = lb > xr ? (xr - la) / (lb - la || 1) : 1;
+        const ax = la, bx = mix(la, lb, f), az = lz(levAt(i)), bz = lz(mix(levAt(i), levAt(i + 1), f));
+        const top = (x, z) => CX([x, Y + fin, z]), bot = (x, z) => CX([x, Y, z]);
+        Fills.quad(top(ax, az), top(bx, bz), top(bx, CB), top(ax, CB), ink(1));
+        if (fin > 1e-3) {          // fin walls: profile side and baseline side, sculpted
+          const n0 = norm3(cross3(sub3(top(bx, bz), top(ax, az)), sub3(bot(ax, az), top(ax, az))));
+          Solids.quad(bot(ax, az), bot(bx, bz), top(bx, bz), top(ax, az), scl3(n0, -1), [0.16, 0.16, 0.18, 1], 1);
+        }
+      }
+      if (S.fin > 1e-3) Solids.quad(CX([-MW, Y, CB]), CX([MW, Y, CB]), CX([MW, Y + S.fin, CB]), CX([-MW, Y + S.fin, CB]), norm3(sub3(CX([0, 0, CB + 1]), CX([0, 0, CB]))), [0.16, 0.16, 0.18, 1], 1);
+    }
+    // chart gridlines = contour levels, labelled in metres
+    const grid = E.outCubic(unit(30.9, 31.35, t));
+    if (grid > 0) for (let n = 0; n <= L; n++) {
+      const z = lz(n), idx = n % 5 === 0, g = clamp(grid * 1.6 - n / L * 0.6);
+      Lines.seg(CX([-MW, Y, z]), CX([mix(-MW, MW, g), Y, z]), ink((idx ? 0.42 : 0.14) * chartVis), idx ? 1.0 : 0.8);
+      if (idx && g > 0.05) { const sz = 11 / UI_S, o = CX([-MW - 8 / UI_S, 0.003, z + sz * 0.36]); Text.world('text', String(n * M_PER_LEVEL), o, dirXf(CX)(o, [1, 0, 0]), dirXf(CX)(o, [0, 0, 1]), sz, ink(0.75 * g * chartVis), { align: 'right', track: 0.04 }); }
+    }
+    // projection lines: contour x thread crossings -> data points. When the slabs separate they become 3D wires.
+    cr.forEach((c) => {
+      const z1 = lz(c.lev), tk = 30.95 + Math.floor((c.x + MW) / (2 * MW) * 8) * 0.0625, d = snap(t - tk, 0.16, 6);
+      if (d <= 0) return;
+      const a = MX([c.x, Y, zs]), b = CX([c.x, Y + S.fin, z1]);
+      if (S.E <= 0 && S.yC <= 0) {
+        const zEnd = mix(zs, z1, d);
+        Lines.seg([c.x, Y, zs], [c.x, Y, Math.min(zEnd, 1)], paper(0.55), 1.0);
+        if (zEnd > 1) Lines.seg([c.x, Y, 1], [c.x, Y, zEnd], ink(0.5), 1.0);
+      } else Lines.seg(a, mix3(a, b, d), C4(mix3(PAPER, INK, 0.25 + 0.5 * S.E), 0.6 * chartVis), 1.0);
+      if (d > 0.98) { const s = 2.8 / UI_S, idx = c.lev % 5 === 0; Solids.box(c.x - s, Y + S.fin, z1 - s, c.x + s, Y + S.fin + 2 * s * (0.3 + S.E), z1 + s, idx ? ORANGE : INK, idx ? [0.86, 0.27, 0.1] : [0.2, 0.2, 0.22], CX, null, idx ? 2 : 1); }
+    });
+    Lines.poly(prof, orange(chartVis), mix(3.0, 2.4, straight));
+    // chart labels
+    const lab = E.outCubic(unit(31.0, 31.3, t));
+    if (lab > 0) { const sz = 12 / UI_S, sn = 'ABCDEFGH'[Math.min(7, secLetter(t))], o = CX([-MW, 0.003, CT - 10 / UI_S]);
+      Text.world('text', 'SECTION ' + sn + '—' + sn + '′', o, dirXf(CX)(o, [1, 0, 0]), dirXf(CX)(o, [0, 0, 1]), sz, ink(lab * chartVis), { track: 0.14 }); }
   }
-  // the section's name, set large: rolls A>B>C on the jumps and races through D..H during the scan
+  // ---- probe: races along the thread between coastline crossings; cobalt wire into the chart
+  const xl = cr.length ? cr[0].x + 0.03 : -1.2, xr2 = cr.length ? cr[cr.length - 1].x - 0.03 : 1.2;
+  let xp = xl;
+  if (t > 31.5) { const ph = (t - 31.5) / 0.5, k = Math.floor(ph), f = E.inOutCubic(ph - k); xp = mix(xl, xr2, k % 2 === 0 ? f : 1 - f); }
+  const gp = fieldAt(xp, -zs, t), lvp = clamp(Math.floor(gp), 0, L), elev = Math.max(0, gp - 0.5) * M_PER_LEVEL;
+  const pr = E.outCubic(unit(31.45, 31.75, t)) * (1 - unit(44.0, 44.3, t));
+  if (pr > 0) {
+    const s = 5 / UI_S * pr, a = MX([xp, Y, zs]), b = CX([xp, Y + S.fin, lz(Math.max(0, gp - 0.5))]);
+    Lines.seg(a, b, cobalt(pr), 1.5);
+    Solids.box(xp - s, S.yM + Y, zs - s, xp + s, S.yM + Y + 2 * s * (0.4 + S.E), zs + s, COBALT, COBALT);
+    Solids.box(-s, 0, -s, s, 2 * s * (0.4 + S.E), s, COBALT, COBALT, (p) => add3(b, p));
+  }
+  // ---- right column: elevation drums, probe readout, section-letter drum, hypsometry columns
+  const col = E.outCubic(unit(31.05, 31.35, t)) * (1 - unit(44.7, 45.0, t));
   if (col > 0) {
-    const secW = (t >= 10 ? spring(t - 10.0, 26) : 0) + (t >= 11 ? spring(t - 11.0, 26) : 0) + [11.5, 11.625, 11.75, 11.875].reduce((a, tk) => a + spring(t - tk, 40), 0);
-    const capL = 0.3, sizeL = capL / Text.capHeight('display'), pitch = 1.3 * capL / sizeL;
-    const xL = UI_RIGHT - Text.width('display', 'W', sizeL), zL = -1 + 40 / UI_S + 0.47 + 34 / UI_S + 26 / UI_S + capL;
-    const k0 = Math.floor(secW), f = secW - k0;
-    for (const [k, off] of [[k0, -f], [k0 + 1, 1 - f]]) {
-      const ch = 'ABCDEFGH'[Math.min(7, k)];
-      const gw = Text.width('display', ch, sizeL);
-      Text.world('display', ch, RC([UI_RIGHT - gw, 0.003, zL]), RCr, [0, 0, 1], sizeL, orange(1), {
-        glyph: () => ({ dy: (off + (1 - E.outExpo(unit(9.15, 9.4, t), 5))) * pitch }), clip: [-1, -capL * 1.06, 99, capL * 0.1] });
+    const RO = (x, z) => RX([x, 0.003, z]), Rr = (o) => dirXf(RX)(o, [1, 0, 0]), Rd = (o) => dirXf(RX)(o, [0, 0, 1]);
+    const TW = (fk, str, x, z, sz, c, o) => { const p = RO(x, z); Text.world(fk, str, p, Rr(p), Rd(p), sz, c, o); };
+    const top = -1 + 18 / UI_S, capU = 0.47, size = capU / Text.capHeight('display');
+    TW('text', 'ELEVATION', COLX, top + 11 / UI_S, 12 / UI_S, ink(col), { track: 0.14 });
+    TW('text', 'M', UI_RIGHT, top + 11 / UI_S, 12 / UI_S, ink(col), { track: 0.14, align: 'right' });
+    Lines.seg(RX([COLX, Y, top + 22 / UI_S]), RX([mix(COLX, UI_RIGHT, col), Y, top + 22 / UI_S]), ink(1), 1.0);
+    const val = mix(0, elev, E.outCubic(unit(31.2, 31.7, t)));
+    const wheels = digitsRoll(val, 3), cell = Text.width('display', '0', size) * 1.02, base = top + 40 / UI_S + capU;
+    if (S.rise <= 0) {       // flat: printed odometer
+      wheels.forEach((w, i) => {
+        const x = COLX + i * cell, d0 = Math.floor(w), f = w - d0;
+        for (const [dg, off] of [[d0, -f], [d0 + 1, 1 - f]]) {
+          const ch = String(((dg % 10) + 10) % 10), gw = Text.width('display', ch, size);
+          const enter = 1 - E.outExpo(unit(31.05 + i * 0.04, 31.27 + i * 0.04, t), 5);
+          TW('display', ch, x + (cell - gw) / 2, base, size, ink(1), { glyph: () => ({ dy: (off + enter) * 1.3 * capU / size }), clip: [-1, -capU * 1.06, 99, capU * 0.1] });
+        }
+      });
+    } else {                 // exploded: extruded digits on prism drums rising out of the slab (the slab hides the rest)
+      const R = 0.5 * capU * 0.94, zc = base - capU / 2, ay = R * (2 * S.rise - 1);
+      Solids.cylinderX(COLX - 0.02, COLX + 3 * cell + 0.02, ay, zc, R * 0.98, WALL_PAPER, 28, RX);
+      wheels.forEach((w, i) => drum('display', '0123456789', w, { base: frameAt(RX, [COLX + i * cell, ay, zc]), size, cell, radius: R,
+        depth: Math.max(0.002, size * 0.1 * S.rise), cap: INK, lit: [0.35, 0.35, 0.38], dark: [0.05, 0.06, 0.25], spread: (capU * 1.25 / R) / (TAU / 10) }));
     }
-    Text.world('text', 'SECTION', RC([xL - 0.02, 0.003, zL - capL + 11 / UI_S]), RCr, [0, 0, 1], 12 / UI_S, ink(col), { track: 0.14, align: 'right' });
-  }
-  // hypsometric bars continue the chart's level lines into the right column
-  const hy = t - 9.5;
-  if (hy > 0) {
-    const cx = Lo.colX, wcol = UI_RIGHT - cx;
-    for (let n = 1; n <= L; n++) {
-      const g = snap(hy - (L - n) * 0.009, 0.22, 6);
-      if (g <= 0) continue;
-      const z = Lo.lz(n), th = Math.min(0.42 * (Lo.chartH / L), 5 / UI_S);
-      const len = HYPSO[n] * wcol * g;
-      const c = n === lvp && pr > 0.5 ? orange(1) : ink(n % 5 === 0 ? 1 : 0.8);
-      Fills.quad(RC([cx, Y, z - th]), RC([cx + len, Y, z - th]), RC([cx + len, Y, z + th]), RC([cx, Y, z + th]), c);
+    const small = 12 / UI_S, fmt = (v) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2), yl = base + 34 / UI_S;
+    TW('text', 'PROBE', COLX, yl, small, ink(col * 0.6), { track: 0.14 });
+    TW('text', 'X ' + fmt(xp / MW), COLX + 84 / UI_S, yl, small, ink(col), { track: 0.1 });
+    TW('text', 'Y ' + fmt(zs), COLX + 190 / UI_S, yl, small, ink(col), { track: 0.1 });
+    TW('text', 'L ' + String(lvp).padStart(2, '0'), COLX + 296 / UI_S, yl, small, orange(col), { track: 0.1 });
+    // section letter
+    const capL = 0.3, sizeL = capL / Text.capHeight('display'), zL = yl + 26 / UI_S + capL, sw = secWheel(t);
+    TW('text', 'SECTION', UI_RIGHT - Text.width('display', 'W', sizeL) - 0.02, zL - capL + 11 / UI_S, 12 / UI_S, ink(col), { track: 0.14, align: 'right' });
+    if (S.rise <= 0) {
+      const k0 = Math.floor(sw), f = sw - k0;
+      for (const [k, off] of [[k0, -f], [k0 + 1, 1 - f]]) {
+        const ch = 'ABCDEFGH'[Math.min(7, k)], gw = Text.width('display', ch, sizeL);
+        TW('display', ch, UI_RIGHT - gw, zL, sizeL, orange(1), { glyph: () => ({ dy: (off + (1 - E.outExpo(unit(31.15, 31.4, t), 5))) * 1.3 * capL / sizeL }), clip: [-1, -capL * 1.06, 99, capL * 0.1] });
+      }
+    } else {
+      const cellL = Text.width('display', 'W', sizeL), R = 0.5 * capL * 0.94, zc = zL - capL / 2, ay = R * (2 * S.rise - 1);
+      Solids.cylinderX(UI_RIGHT - cellL - 0.01, UI_RIGHT + 0.01, ay, zc, R * 0.98, WALL_PAPER, 24, RX);
+      drum('display', 'ABCDEFGH', sw, { base: frameAt(RX, [UI_RIGHT - cellL, ay, zc]), size: sizeL, cell: cellL, radius: R,
+        depth: Math.max(0.002, sizeL * 0.1 * S.rise), cap: ORANGE, lit: [0.95, 0.45, 0.3], dark: [0.35, 0.08, 0.05], spread: (capL * 1.25 / R) / (TAU / 8) });
     }
-    Text.world('text', 'HYPSOMETRY', RC([cx, 0.003, Lo.chartTop - 10 / UI_S]), RCr, [0, 0, 1], 12 / UI_S, ink(clamp(hy * 4)), { track: 0.14 });
+    // hypsometry: the chart's level lines continue as bars, which become 3D columns (area -> volume)
+    const hy = t - 31.5;
+    if (hy > 0) {
+      const wcol = UI_RIGHT - COLX;
+      for (let n = 1; n <= L; n++) {
+        const g = snap(hy - (L - n) * 0.009, 0.22, 6); if (g <= 0) continue;
+        const z = lz(n), th = Math.min(0.42 * ((CB - CT) / L), 5 / UI_S), len = HYPSO[n] * wcol * g;
+        const hh = 0.002 + 0.12 * S.E * HYPSO[n] * (1 + 0.15 * Math.sin(TAU * (t * 2 - n / 7.5)) * unit(36.5, 37.5, t));
+        const hl = n === lvp && pr > 0.5;
+        Solids.box(COLX, 0.001, z - th, COLX + len, 0.001 + hh, z + th, hl ? ORANGE : INK, hl ? [0.86, 0.27, 0.1] : [0.22, 0.22, 0.25], RX, null, hl ? 2 : 1);
+      }
+      const o = RO(COLX, CT - 10 / UI_S);
+      Text.world('text', 'HYPSOMETRY', o, Rr(o), Rd(o), 12 / UI_S, ink(clamp(hy * 4) * col), { track: 0.14 });
+    }
   }
-  // module labels (they roll out as the climax takes the sheet)
-  const lab = E.outCubic(unit(9.0, 9.3, t));
+  // ---- map labels
+  const lab = E.outCubic(unit(31.0, 31.3, t)) * (1 - unit(44.0, 44.25, t));
   if (lab > 0) {
-    const sz = 12 / UI_S;
-    const secName = 'ABCDEFGH'[Math.min(7, (t >= 10 ? 1 : 0) + (t >= 11 ? 1 : 0) + (t >= 11.5 ? Math.floor((t - 11.5) / 0.125) + 1 : 0))];
-    const out = (i) => ({ dy: -1.4 * spring(t - 12.0 - i * 0.012, 30) });
-    const clipL = [-99, -sz * 1.0, 99, sz * 0.3];
-    Text.world('text', 'SECTION ' + secName + '—' + secName + '′', CH([Lo.m2w(-MW, 0)[0], 0.003, Lo.chartTop - 10 / UI_S]), [1, 0, 0], CHd, sz, ink(lab), { track: 0.14 });
-    Text.world('text', 'PLAN', [Lo.m2w(-MW, 0)[0] + 14 / UI_S, 0.003, Lo.m2w(0, -1)[1] + 26 / UI_S], [1, 0, 0], [0, 0, 1], sz, paper(lab), { track: 0.14, glyph: out, clip: clipL });
-    const [ax] = Lo.m2w(-MW, 0), [bx] = Lo.m2w(MW, 0);
-    Text.world('text', secName, [ax + 14 / UI_S, 0.003, zsw - 8 / UI_S], [1, 0, 0], [0, 0, 1], sz, paper(lab), { glyph: out, clip: clipL });
-    Text.world('text', secName + '′', [bx - 14 / UI_S, 0.003, zsw - 8 / UI_S], [1, 0, 0], [0, 0, 1], sz, paper(lab), { align: 'right', glyph: out, clip: clipL });
+    const sz = 12 / UI_S, sn = 'ABCDEFGH'[Math.min(7, secLetter(t))];
+    Text.world('text', 'PLAN', MX([-MW + 14 / UI_S, 0.003, -1 + 26 / UI_S]), [1, 0, 0], [0, 0, 1], sz, paper(lab), { track: 0.14 });
+    Text.world('text', sn, MX([-MW + 14 / UI_S, 0.003, zs - 8 / UI_S]), [1, 0, 0], [0, 0, 1], sz, paper(lab), {});
+    Text.world('text', sn + '′', MX([MW - 14 / UI_S, 0.003, zs - 8 / UI_S]), [1, 0, 0], [0, 0, 1], sz, paper(lab), { align: 'right' });
   }
+  return S;
 }
 
-/* ----------------------------------------------------------------- frame */
-function renderFrame(t) {
-  const cam = camAt(t);
-  gl.viewport(0, 0, W, H);
-  gl.clearColor(INK[0], INK[1], INK[2], 1);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
-  const useField = t < 6.0 || t >= 14.25;
-  if (useField) {
-    FieldPlane.draw(cam, fieldState(t), TEX);
-  } else {
-    const Lo = layoutAt(t);
-    const p0 = Lo.m2w(-MW, -1), p1 = Lo.m2w(MW, 1);
-    Fills.rectXZ(SHEET[0], SHEET[1], SHEET[2], SHEET[3], -0.004, C4(PAPER));
-    Fills.rectXZ(p0[0], p0[1], p1[0], p1[1], -0.0015, C4(INK));
-    Fills.flush(cam);
-    const climax = t >= 12.0;
-    const T = climax ? climaxState(t) : terraceState(t);
-    if (climax) { const [mesh, key] = climaxMesh(t); Terraces.upload(mesh, key); }
-    else Terraces.upload(TERR.mesh, 'terrain');
-    Terraces.draw(cam, T);
-    Lines.begin();
-    if (t < 8.0) Lines.poly(threadProfile(T, SP / 2), C4(ORANGE), 3.0);
-    drawInterface(t, cam);
-    Fills.flush(cam);
-    Lines.flush(cam, true, 0.0012);
+/* ----------------------------------------------------------------- tiles / towers (44.4–62 s) */
+const TILES = [];
+const TCOLS = 8, TROWS = 4, TW_ = (2 * MW) / TCOLS, TH_ = 2 / TROWS, STREET = 0.12, AVENUE = 0.6;
+function systemInit() {
+  let mx = 0;
+  for (let r = 0; r < TROWS; r++) for (let c = 0; c < TCOLS; c++) {
+    const x0 = -MW + c * TW_, z0 = -1 + r * TH_;
+    let s = 0, n = 0;
+    for (let j = 0; j < 12; j++) for (let i = 0; i < 12; i++) { s += gridSample(FIELDS.terr2, x0 + (i + 0.5) / 12 * TW_, -(z0 + (j + 0.5) / 12 * TH_)); n++; }
+    const e = s / n; mx = Math.max(mx, e);
+    TILES.push({ c, r, x0, z0, e, id: 'ABCDEFGH'[c] + (r + 1) });
   }
-  drawCaptions(t, PAPER);
-  Text.flush(cam);
+  for (const T of TILES) T.e /= mx;
+}
+// binary subdivision order: x, z, x, z, x  (1 -> 2 -> 4 -> 8 -> 16 -> 32)
+const SPLIT_T = [45.0, 45.125, 45.25, 45.375, 45.5];
+const MERGE_T = [59.3, 59.425, 59.55, 59.675, 59.8];
+function tileOffset(T, t) {
+  const bits = [[0, (T.c >> 2) & 1], [1, (T.r >> 1) & 1], [0, (T.c >> 1) & 1], [1, T.r & 1], [0, T.c & 1]];
+  let ox = 0, oz = 0;
+  bits.forEach(([axis, b], k) => {
+    const open = snap(t - SPLIT_T[k], 0.1, 6) * (1 - snap(t - MERGE_T[4 - k], 0.1, 6));
+    const d = (b ? 1 : -1) * 0.018 * open;
+    if (axis === 0) ox += d; else oz += d;
+  });
+  const spread = E.inOutCubic(unit(46.0, 47.6, t)) * (1 - E.inOutCubic(unit(58.6, 59.3, t)));
+  ox = mix(ox, (T.c - (TCOLS - 1) / 2) * STREET, spread);
+  oz = mix(oz, (T.r - (TROWS - 1) / 2) * STREET + (T.r >= TROWS / 2 ? 0.5 : -0.5) * (AVENUE - STREET), spread);
+  return [ox, oz];
+}
+function tileHeight(T, t) {
+  const cx = T.x0 + TW_ / 2, cz = T.z0 + TH_ / 2, d = Math.hypot(cx, cz * 1.4);
+  const rise = E.outExpo(unit(48.0 + d * 0.12, 48.55 + d * 0.12, t), 5) * (1 - E.inOutCubic(unit(58.0, 58.6, t)));
+  let wave = 0;
+  if (t > 54 && t < 56.2) for (let b = 0; b < 4; b++) { const tb = 54 + b * 0.5 + (cx + MW) * 0.06; wave += hit(t - tb, 0.16) * (t >= tb ? 1 : 0) * 0.07; }
+  const top0 = mix(0.25, 0.0, E.inOutCubic(unit(60.0, 60.8, t)));   // block sinks flush into the paper before the monument
+  return top0 + rise * (0.12 + 0.85 * T.e) + wave;
+}
+function tileFlip(T, t) {
+  if (t < 54 || t > 56.3) return 0;
+  const cx = T.x0 + TW_ / 2, ph = (t - 54) * 2 - (cx + MW) / (2 * MW) * 0.9;
+  const k = ph - Math.floor(ph);
+  return (Math.floor(ph) % 2 === 0 && k < 0.5 && Math.floor(ph) >= 0 && Math.floor(ph) < 4) ? sstep(0, 0.12, k) * (1 - sstep(0.38, 0.5, k)) : 0;
+}
+
+/* thread network: the original thread is the main line (z = 0 street); a branch reaches every tower */
+function routeFor(T, t) {
+  const [ox, oz] = tileOffset(T, t);
+  const x0 = T.x0 + ox, z0 = T.z0 + oz, zc = z0 + TH_ / 2;
+  const xs = x0 - STREET / 2;                     // street on the tower's west side
+  const zMain = 0;
+  return [[xs, zMain], [xs, zc], [x0, zc]];
+}
+function polyLen(P) { let s = 0; for (let i = 1; i < P.length; i++) s += Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]); return s; }
+function polyAt(P, d) {
+  for (let i = 1; i < P.length; i++) { const l = Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]); if (d <= l) { const f = l ? d / l : 0; return [mix(P[i - 1][0], P[i][0], f), mix(P[i - 1][1], P[i][1], f)]; } d -= l; }
+  return P[P.length - 1];
+}
+function polyPart(P, d0, d1) {
+  const out = [polyAt(P, d0)]; let acc = 0;
+  for (let i = 1; i < P.length; i++) { acc += Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]); if (acc > d0 && acc < d1) out.push(P[i]); }
+  out.push(polyAt(P, d1)); return out;
+}
+
+function drawSlabs(S, t) {
+  if (t >= 45.05) return;
+  if (S.yC > 1e-4 || S.hC > 0) { const f = chartXf(S); Solids.box(-MW, -0.035, CT - 0.05, MW, 0, CB + 0.02, PAPER, WALL_PAPER, f); if (S.hC < 0.05 && S.dock < 0.05) dropShadow(-MW, CT - 0.05, MW, CB, S.yC - 0.035, 0.18); }
+  if (S.yR > 1e-4 || S.hR > 0) { const f = colXf(S); Solids.box(COLX - 0.04, -0.035, -1.05, UI_RIGHT + 0.04, 0, CB + 0.02, PAPER, WALL_PAPER, f); if (S.hR < 0.05 && S.dock < 0.05) dropShadow(COLX, -1, UI_RIGHT, CB, S.yR - 0.035, 0.18); }
+}
+function renderSystem(t, cam) {
+  Fills.rectXZ(SHEET[0], SHEET[1], SHEET[2], SHEET[3], -0.004, C4(PAPER));
+  Lines.begin();
+  const tilesOn = t >= 45.0;
+  let mapTop = null;
+  const S = t < 45.0 ? drawSheet(t, cam) : slabs(t);
+  drawSlabs(S, t);
+  if (!tilesOn) {
+    // map slab (black, with the contour map printed on top)
+    const y = S.yM, th = S.thM;
+    if (y > 1e-4) { Solids.box(-MW, y - th, -1, MW, y, 1, INK, WALL_PAPER); dropShadow(-MW, -1, MW, 1, y - th); }
+    else Fills.rectXZ(-MW, -1, MW, 1, -0.0015, C4(INK));
+    mapTop = y + MAP_LIFT;          // printed by the terrace mesh itself: identical lines to Movement II and to the monument
+  } else {
+    // ---- the map as 32 tiles: one block -> binary subdivision -> streets -> towers -> reassembly
+    const floating = t < 45.2 ? S.yM - S.thM : 0, merged = t >= 59.9;
+    if (merged) mapTop = tileHeight(TILES[0], t) + MAP_LIFT;
+    if (floating > 1e-4) dropShadow(-MW, -1, MW, 1, floating);
+    for (const T of TILES) {
+      const [ox, oz] = tileOffset(T, t);
+      const x0 = T.x0 + ox, z0 = T.z0 + oz, x1 = x0 + TW_, z1 = z0 + TH_;
+      const top = t < 45.2 ? S.yM : tileHeight(T, t);
+      const bot = floating;
+      if (top > 1e-4) Solids.box(x0, Math.min(bot, top - 1e-4), z0, x1, top, z1, INK, WALL_PAPER);
+      const ym = top + MAP_LIFT;
+      if (!merged) MapSurf.quad([[x0, ym, z0], [x1, ym, z0], [x1, ym, z1], [x0, ym, z1]], [[T.x0, -T.z0], [T.x0 + TW_, -T.z0], [T.x0 + TW_, -(T.z0 + TH_)], [T.x0, -(T.z0 + TH_)]], 1, tileFlip(T, t));
+      // kinetic labels on the south face of each tower
+      const lab = E.outCubic(unit(52.0 + T.c * 0.03, 52.3 + T.c * 0.03, t)) * (1 - unit(57.6, 58.0, t));
+      if (lab > 0 && top > 0.3) {
+        const north = T.r < TROWS / 2, zf = north ? z1 + 0.0015 : z0 - 0.0015, right = north ? [1, 0, 0] : [-1, 0, 0], xs = north ? x0 + 0.025 : x1 - 0.025;
+        const sz = 0.034, roll = (i) => ({ dy: (1 - spring(t - 52.0 - T.c * 0.03 - i * 0.02, 30)) * 1.4 });
+        Text.world('text', T.id, [xs, 0.115, zf], right, [0, -1, 0], sz, C4(INK, lab), { track: 0.12, glyph: roll, clip: [-1, -sz * 1.05, 9, sz * 0.25] });
+        Text.world('text', String(Math.round(T.e * 870)).padStart(3, '0') + ' M', [xs, 0.07, zf], right, [0, -1, 0], sz * 0.8, C4(INK, lab * 0.7), { track: 0.1, glyph: roll, clip: [-1, -sz * 0.85, 9, sz * 0.2] });
+      }
+    }
+    // the main line (the thread) drops into the street the subdivision opened under it
+    const zs = sectionZ(t), blockTop = mix(0.25, 0.0, E.inOutCubic(unit(60.0, 60.8, t)));
+    const down = E.inOutCubic(unit(45.125, 45.4, t)), up = E.inOutCubic(unit(58.55, 59.05, t));
+    const yline = mix(mix(S.yM + 0.002, 0.003, down), blockTop + 0.002, up);
+    const ext = MW + 3.5 * STREET * E.inOutCubic(unit(46.0, 47.6, t)) * (1 - E.inOutCubic(unit(58.6, 59.3, t)));
+    Lines.seg([-ext, yline, zs], [ext, yline, zs], C4(ORANGE), 3.0);
+    // branches + data pulses (draw on 50.0–50.6, retract 56.8–57.6)
+    for (const T of TILES) {
+      const P = routeFor(T, t), Ln = polyLen(P);
+      const on = E.inOutCubic(unit(50.0 + T.c * 0.04 + T.r * 0.02, 50.45 + T.c * 0.04 + T.r * 0.02, t)), off = E.inOutCubic(unit(56.8, 57.6, t));
+      const d0 = Ln * off, d1 = Ln * on;
+      if (d1 - d0 < 1e-4) continue;
+      Lines.poly(polyPart(P, d0, d1).map((p) => [p[0], 0.003, p[1]]), C4(ORANGE, 0.85), 1.6);
+      // pulses: launched on every 16th, outward until 56 s, then converging toward the main line
+      if (t > 50.5 && t < 57.0) for (let k = 0; k < 4; k++) {
+        const ph = ((t - 50.5) * 2 + k / 4 + (T.c + T.r * 3) * 0.13) % 1, conv = t > 56.0;
+        const dd = (conv ? 1 - ph : ph) * Ln;
+        if (dd < d0 || dd > d1) continue;
+        const a = polyAt(P, Math.max(d0, dd - 0.05)), b = polyAt(P, dd);
+        Lines.seg([a[0], 0.005, a[1]], [b[0], 0.005, b[1]], C4(PAPER, 1), 3.2);
+      }
+    }
+  }
+  Fills.flush(cam);
+  Solids.flush(cam, [0.018, 1.0, t >= 44.4 ? 0.5 : 0]);
+  MapSurf.draw(cam, {});
+  if (mapTop !== null) { Terraces.upload(TERR.mesh2, 'm2'); Terraces.draw(cam, Object.assign(terraceState(t), { xf: [0, 0, 1, mapTop] })); }
+  Glyph3D.flush(cam);
+  Lines.flush(cam, true, 0.0012);
 }
 
 /* ---- audio.js ---- */
 /* =====================================================================
    SOUNDTRACK — original composition, synthesized with OfflineAudioContext.
-   120 BPM, 4/4, D minor. 15 s = 7 bars + 1/2 bar. 48 kHz stereo.
-   Two identical cycles are rendered and the second is kept, so every tail
-   that crosses 15.000 s wraps into the start: the loop is seamless.
-   Harmony per bar: Dm9 | Dm9 | Bbmaj7 | Gm9 | Fmaj9 | A7sus4-A7 | Dm | Bbmaj9#11 (1/2)
+   120 BPM, 4/4, D minor. 75 s = 37 bars + 1/2 bar. 48 kHz stereo.
+   The cycle is rendered after a pre-roll of the previous cycle's last bars,
+   so every tail that crosses 75.000 s wraps into the start: the loop is seamless.
+   Form: I thread/signal (bars 1-8) · II terrain, drop 1 at 0:20 (9-16) ·
+   III system (17-24) · IV network (25-31) · V monument, drop 2 at 1:02, title (32-37½)
    ===================================================================== */
 window.renderSoundtrack = async (opts = {}) => {
-  const SR = 48000, CYCLE = 15, NC = opts.verify ? 3 : 2, LEN = CYCLE * NC;
+  const SR = 48000, CYCLE = 75, PRE = 6, NC = opts.verify ? 3 : 2, LEN = CYCLE * NC;
   const ctx = new OfflineAudioContext(2, SR * LEN, SR);
   const rnd = mulberry32(20261011);
   const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
@@ -1801,7 +2283,7 @@ window.renderSoundtrack = async (opts = {}) => {
   const S16 = (bar, step) => bar * 2 + step * 0.125;
 
   // ---------------------------------------------------------- shared resources
-  const noiseBuf = ctx.createBuffer(2, SR * 3, SR);
+  const noiseBuf = ctx.createBuffer(2, SR * 6, SR);
   for (let c = 0; c < 2; c++) { const d = noiseBuf.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = rnd() * 2 - 1; }
   const curve = (drive) => { const n = 2048, c = new Float32Array(n); for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; c[i] = Math.tanh(x * drive) / Math.tanh(drive); } return c; };
   function IR(sec, decay, seed) {
@@ -1831,7 +2313,7 @@ window.renderSoundtrack = async (opts = {}) => {
   // noise read offset is a pure function of the event's position in the cycle -> both cycles are sample-identical
   function noise(t, dur) {
     const tl = ((t % CYCLE) + CYCLE) % CYCLE, h = Math.sin(tl * 12.9898 + 0.31) * 43758.5453;
-    const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.start(t, (h - Math.floor(h)) * 1.5, dur + 0.05); return s;
+    const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.start(t, (h - Math.floor(h)) * 2.5, dur + 0.05); return s;   // offset <= 2.5 s, dur <= 3.4 s
   }
   function env(param, t, a, peak, d, floor = 0.0001) {
     param.setValueAtTime(0, t); param.linearRampToValueAtTime(peak, t + a);
@@ -1840,17 +2322,20 @@ window.renderSoundtrack = async (opts = {}) => {
   function pan(node, p) { const n = ctx.createStereoPanner(); n.pan.value = p; node.connect(n); return n; }
 
   // ---------------------------------------------------------- instruments
-  function kick(t, big = 0) {
+  function kick(t, big = 0) {         // big: 1 = section hit, 0 = normal, < 0 = soft heartbeat
+    const soft = big < 0, b = Math.max(0, big);
     const o = ctx.createOscillator(); o.type = 'sine';
-    o.frequency.setValueAtTime(180 + big * 40, t);
-    o.frequency.exponentialRampToValueAtTime(54, t + 0.042);
-    o.frequency.exponentialRampToValueAtTime(41 - big * 4, t + 0.32 + big * 0.3);
-    const g = G(0); env(g.gain, t, 0.0015, 0.95, 0.40 + big * 0.45);
-    o.connect(g); g.connect(kickSat); o.start(t); o.stop(t + 1.0 + big * 0.5);
-    const n = noise(t, 0.02), hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2500;
-    const gn = G(0); env(gn.gain, t, 0.0008, 0.35, 0.012); n.connect(hp); hp.connect(gn); gn.connect(kickBus);
+    o.frequency.setValueAtTime(soft ? 110 : 180 + b * 40, t);
+    o.frequency.exponentialRampToValueAtTime(soft ? 50 : 54, t + (soft ? 0.06 : 0.042));
+    o.frequency.exponentialRampToValueAtTime(41 - b * 4, t + 0.32 + b * 0.3);
+    const g = G(0); env(g.gain, t, soft ? 0.004 : 0.0015, soft ? 0.95 * -big : 0.95, soft ? 0.5 : 0.40 + b * 0.45);
+    o.connect(g); g.connect(kickSat); o.start(t); o.stop(t + 1.0 + b * 0.5);
+    if (!soft) {
+      const n = noise(t, 0.02), hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2500;
+      const gn = G(0); env(gn.gain, t, 0.0008, 0.35, 0.012); n.connect(hp); hp.connect(gn); gn.connect(kickBus);
+    }
     // side-chain duck of tonal bus
-    duck.gain.setValueAtTime(0.32, t); duck.gain.setTargetAtTime(1, t + 0.012, 0.065 + big * 0.03);
+    duck.gain.setValueAtTime(soft ? 0.7 : 0.32, t); duck.gain.setTargetAtTime(1, t + 0.012, soft ? 0.12 : 0.065 + b * 0.03);
   }
   function clap(t, vel = 1, wet = 0.22) {
     const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1350; bp.Q.value = 0.9;
@@ -1963,6 +2448,27 @@ window.renderSoundtrack = async (opts = {}) => {
     const n = noise(t, dur), hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 4200;
     const g = G(0); env(g.gain, t, 0.001, lvl, dur); n.connect(hp); hp.connect(g); g.connect(drumBus); send(g, verb, 0.4);
   }
+  function ping(t, m, vel = 0.4, p = 0) {       // a data pulse: sine + inharmonic partial
+    const f = mtof(m), sum = G(1);
+    for (const [ratio, lvl, dec] of [[1, 0.22, 0.16], [2.76, 0.07, 0.05]]) {
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f * ratio;
+      const g = G(0); env(g.gain, t, 0.0008, lvl * vel, dec); o.connect(g); g.connect(sum); o.start(t); o.stop(t + dec + 0.05);
+    }
+    const out = pan(sum, p); out.connect(synthBus); send(out, verb, 0.35);
+  }
+  function rumble(t0, t1, lvl = 0.3) {          // tectonic shift: low noise, filter opens and closes
+    const n = noise(t0, t1 - t0), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 4;
+    lp.frequency.setValueAtTime(70, t0); lp.frequency.exponentialRampToValueAtTime(520, t0 + (t1 - t0) * 0.6); lp.frequency.exponentialRampToValueAtTime(90, t1);
+    const g = G(0); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(lvl, t0 + 0.3);
+    g.gain.setValueAtTime(lvl, t1 - 0.4); g.gain.linearRampToValueAtTime(0, t1);
+    n.connect(lp); lp.connect(g); g.connect(duck); send(g, verb, 0.25);
+  }
+  function whoosh(t0, t1, lvl = 0.2) {          // docking: band-passed noise sweeping down
+    const n = noise(t0, t1 - t0), bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.6;
+    bp.frequency.setValueAtTime(6000, t0); bp.frequency.exponentialRampToValueAtTime(300, t1);
+    const g = G(0); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(lvl, t0 + (t1 - t0) * 0.35); g.gain.exponentialRampToValueAtTime(0.0001, t1);
+    n.connect(bp); bp.connect(g); g.connect(drumBus); send(g, verb, 0.3);
+  }
   function swell(t0, t1, lvl = 0.3) {     // reverse cymbal into the downbeat
     const n = noise(t0, t1 - t0), hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.setValueAtTime(2500, t0); hp.frequency.exponentialRampToValueAtTime(7000, t1);
     const g = G(0); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(lvl, t1 - 0.003); g.gain.linearRampToValueAtTime(0, t1);
@@ -1970,85 +2476,241 @@ window.renderSoundtrack = async (opts = {}) => {
   }
 
   // ---------------------------------------------------------- the score
-  const DM9 = [50, 53, 57, 60, 64], BBM7 = [46, 50, 53, 57], GM9 = [43, 46, 50, 53, 57], FM9 = [41, 45, 48, 52, 55];
-  const A7S = [45, 50, 52, 55], A7 = [45, 49, 52, 55], DMC = [50, 57, 62, 65, 69], BBM9 = [46, 53, 57, 60, 64];
-  const ROOT = [38, 38, 34, 31, 41, 33, 38, 34];
+  const CH = {
+    Dm9: { pad: [50, 53, 57, 60, 64], arp: [62, 65, 69, 72, 76], root: 38 },
+    Dm: { pad: [50, 57, 62, 65, 69], arp: [62, 65, 69, 74, 77], root: 38 },
+    Bb: { pad: [46, 50, 53, 57], arp: [58, 62, 65, 69, 72], root: 34 },
+    Bb9: { pad: [46, 53, 57, 60, 62], arp: [58, 62, 65, 69, 72], root: 34 },
+    Bb11: { pad: [46, 53, 57, 60, 64], arp: [65, 69, 72, 76, 77], root: 34 },
+    Gm9: { pad: [43, 46, 50, 53, 57], arp: [55, 58, 62, 65, 69], root: 31 },
+    F: { pad: [41, 45, 48, 52, 55], arp: [53, 57, 60, 64, 67], root: 41 },
+    A7s: { pad: [45, 50, 52, 55], arp: [57, 62, 64, 67, 69], root: 33 },
+    A7: { pad: [45, 49, 52, 55], arp: [57, 61, 64, 67, 69], root: 33 },
+  };
+  // one chord (or two, split at beat 3) per bar; index = bar number - 1
+  const PLAN = ['Dm9', 'Dm9', 'Bb', 'Gm9', 'Dm9', 'Dm9', 'Bb9', 'A7s|A7',
+    'Bb', 'Gm9', 'Dm', 'Bb', 'F', 'Gm9', 'Bb|A7s', 'A7s|A7',
+    'F', 'Dm9', 'Bb', 'Gm9', 'A7s|A7', 'Dm', 'Bb', 'Gm9|A7',
+    'Dm9', 'Bb', 'F', 'Gm9', 'Bb9', 'A7s', 'A7',
+    'Dm', 'Bb', 'Gm9', 'A7s|A7', 'Bb11', 'Bb11', 'Bb11'];
+  const chordAt = (bar, beat = 0) => { const p = PLAN[bar].split('|'); return CH[p.length > 1 && beat >= 2 ? p[1] : p[0]]; };
+  // tonal master filter (melt, fly-through dip); everything tonal passes through it
+  const tone = ctx.createBiquadFilter(); tone.type = 'lowpass'; tone.Q.value = 0.9; tone.frequency.value = 20000;
+  duck.disconnect(); duck.connect(tone); tone.connect(master);
+  let MIN = -1e9;                                      // events before MIN are skipped (pre-roll cycle)
+  const EV = [];                                       // [time, fn]: created just in time while rendering (see below)
 
   function compose(T) {
-    // kick on every beat (30); section downbeats hit harder
-    for (let b = 0; b < 30; b++) kick(T + B(b), [0, 12, 24, 28].includes(b) ? 1 : 0);
-    // clap on beats 2 & 4 of every bar (and the final upbeat)
-    for (let b = 1; b < 30; b += 2) clap(T + B(b), b === 29 ? 1.1 : 1, b === 23 ? 0.35 : 0.22);
-    // hats: 16ths with groove; open hats on the off-8ths from bar 3; roll at 1.5 and 11.5
-    for (let s = 0; s < 120; s++) {
-      const t = T + s * 0.125, inBeat = s % 4, bar = Math.floor(s / 16);
-      if (bar === 7 && inBeat === 0) continue;
-      const v = [0.45, 0.22, 0.8, 0.3][inBeat] * (bar >= 6 ? 1.15 : 1);
-      if (inBeat === 2 && bar >= 2 && bar !== 3) hat(t, 0.7, true, 0.25); else hat(t, v, false, inBeat % 2 ? -0.3 : 0.3);
+    const at = (x) => T + x, ok = (x) => T + x >= MIN;
+    const play = (x, fn) => { if (ok(x)) EV.push([at(x), fn]); };
+    // ---------------- drums
+    const KICK = (bar, beat) => {
+      if (bar <= 6) return true;
+      if (bar === 7) return beat < 3;
+      if (bar === 8 || bar === 9) return false;
+      if (bar >= 10 && bar <= 14) return true;
+      if (bar === 15) return beat === 0 || beat === 2;
+      if (bar >= 16 && bar <= 18) return true;
+      if (bar === 19) return false;                   // fly-through: the floor drops away
+      if (bar >= 20 && bar <= 29) return true;
+      if (bar === 30) return beat < 2;
+      if (bar >= 31 && bar <= 33) return true;
+      if (bar === 34) return beat < 3;
+      return false;
+    };
+    const BIG = [0, 40, 68, 96, 124];                 // 0:00, drop 1, explode, the city, drop 2
+    for (let b = 0; b < 150; b++) {
+      const bar = Math.floor(b / 4), beat = b % 4;
+      if (KICK(bar, beat)) play(B(b), (t) => kick(t, BIG.includes(b) ? 1 : 0));
+      else if (bar === 35 || bar === 36) play(B(b), (t) => kick(t, -0.45));  // heartbeat under the title's ring ripples
     }
-    for (let k = 0; k < 8; k++) hat(T + 1.5 + 0.0625 + k * 0.0625, 0.35 + k * 0.05, false, k % 2 ? 0.4 : -0.4);   // 32nd roll (densify)
-    // ---- bar 1: the thread. a pluck snaps on the downbeat, then the note-rate doubles on every 16th (1>2>4>8)
-    pluck(T + 0, 74, 1.2, 0, { bend: 7, bendT: 0.06, dec: 0.45, cut: 7000, wet: 0.35 });
-    const arp = [74, 81, 77, 86, 74, 77, 81, 84];
-    [[0.5, 1], [0.625, 2], [0.75, 4], [0.875, 8]].forEach(([t0, n]) => {
-      for (let k = 0; k < n; k++) pluck(T + t0 + k * (0.125 / n), arp[(k + n) % arp.length] - (n > 4 ? 12 : 0), 0.75, (k % 2 ? 0.45 : -0.45), { dec: 0.12, cut: 4800 });
+    const CLAP = (bar) => (bar >= 2 && bar <= 6) || (bar >= 10 && bar <= 14) || (bar >= 16 && bar <= 18) || (bar >= 20 && bar <= 29) || (bar >= 31 && bar <= 33);
+    for (let b = 1; b < 150; b += 2) { const bar = Math.floor(b / 4); if (CLAP(bar)) play(B(b), (t) => clap(t, bar >= 31 ? 1.08 : 1, (bar === 6 || bar === 33) ? 0.35 : 0.22)); }
+    for (let s = 0; s < 600; s++) {
+      const bar = Math.floor(s / 16), st = s % 16, inBeat = s % 4, x = s * 0.125;
+      if (bar === 0 || bar >= 35) continue;
+      const quiet = bar === 8 || bar === 9 || bar === 19;
+      if (quiet && inBeat !== 2) continue;
+      if (bar === 15 && st >= 8 && inBeat !== 2) continue;
+      if (bar === 30 && st >= 4) continue;
+      const v = [0.45, 0.22, 0.8, 0.3][inBeat] * (bar >= 31 ? 1.15 : 1) * (quiet ? 0.55 : 1);
+      const open = inBeat === 2 && bar >= 2 && bar !== 3 && !quiet && bar !== 15;
+      play(x, (t) => hat(t, open ? 0.7 : v, open, inBeat % 2 ? -0.3 : 0.3));
+    }
+    for (const x0 of [3.5, 7.5, 47.5]) for (let k = 0; k < 8; k++) play(x0 + 0.0625 + k * 0.0625, (t) => hat(t, 0.35 + k * 0.05, false, k % 2 ? 0.4 : -0.4));   // 32nd rolls
+    // snare rolls into the drops / the title
+    for (const [x0, x1] of [[19.5, 20.0], [61.0, 62.0], [69.5, 70.0]]) {
+      const n = Math.round((x1 - x0) / 0.0625);
+      for (let k = 0; k < n; k++) { const f = k / n; play(x0 + k * 0.0625 + (f > 0.5 ? 0 : 0.03125), (t) => clap(t, 0.3 + 0.45 * f, 0.12)); }
+    }
+    // ---------------- bass: off-beat 16ths on the bar's root; octave chatter on beat 4 of a beat
+    const BASS = (bar) => !(bar === 0 || bar === 8 || bar === 9 || bar === 19 || bar >= 35);
+    for (let s = 0; s < 600; s++) {
+      const bar = Math.floor(s / 16), st = s % 16; if (!BASS(bar)) continue;
+      const beat = Math.floor(st / 4), C = chordAt(bar, beat), m = C.root, x = s * 0.125;
+      if (bar === 10) { if ([3, 6, 7, 10, 11, 14, 15].includes(st)) play(x, (t) => bass(t, 0.1, m + (st > 9 ? 12 : 0), { cut0: 900, vel: 0.9 })); continue; }   // drop 1: half-time
+      if (bar === 12) { if (st % 4 !== 0) play(x, (t) => bass(t, 0.11, m + (st % 4 === 3 ? 12 : 0), { cut0: 1600, glide: st % 8 === 1 ? m - 5 : 0 })); continue; }   // the drape: glides
+      if (bar === 15 && st >= 8) continue;
+      if (bar === 30 && st >= 8) continue;
+      if (st % 4 === 0) continue;
+      const net = bar >= 24 && bar <= 29;
+      const oct = net ? (st % 4 === 2 ? 12 : st % 4 === 3 ? 7 : 0) : (st % 4 === 3 ? 12 : 0);
+      const climax = bar >= 31 && bar <= 34;
+      play(x, (t) => bass(t, net ? 0.08 : 0.1, m + oct + (climax && st >= 12 && st % 4 === 3 ? 3 : 0),
+        { cut0: climax ? 3400 : bar >= 16 && bar <= 23 ? 2600 : 1500 + 60 * st, cut1: climax ? 520 : 380, q: climax || bar === 16 ? 8 : 7, vel: (st % 4 === 2 ? 1 : 0.8) * (climax ? 1.05 : 1) }));
+    }
+
+    // ================= I · THREAD -> SIGNAL (bars 1-8)
+    // bar 1: a pluck on every whip; the sub holds the floor
+    [[0, 74, 0], [0.5, 69, -0.5], [1.0, 81, 0.5], [1.5, 77, 0]].forEach(([x, m, p], i) => play(x, (t) => pluck(t, m, i ? 0.95 : 1.2, p, { bend: i ? 5 : 7, bendT: 0.06, dec: i ? 0.3 : 0.45, cut: 7000, wet: 0.35 })));
+    play(0, (t) => sub(t, 1.95, 26, 0.5));
+    // bars 2 and 4: binary splits on 16ths -> note rate doubles (1, 2, 4, 8)
+    const split = (x0, ch, lift = 0) => [[0, 1], [0.125, 2], [0.25, 4], [0.375, 8]].forEach(([dx, n]) => {
+      for (let k = 0; k < n; k++) play(x0 + dx + k * (0.125 / n), (t) => pluck(t, ch.arp[(k + n) % ch.arp.length] + lift - (n > 4 ? 12 : 0), 0.75, (k % 2 ? 0.45 : -0.45), { dec: 0.12, cut: 4800 }));
     });
-    pluck(T + 1.0, 81, 0.9, 0.35, { bend: -5, bendT: 0.18, dec: 0.5, wet: 0.4 });                 // the white thread swings out (a fifth above)
-    // ---- bars 1-2 bass: off-beat pulse, then octave chatter
-    for (let s = 0; s < 32; s++) {
-      const bar = Math.floor(s / 16), st = s % 16, m = ROOT[bar];
-      const on = bar === 0 ? [2, 3, 6, 7, 10, 11, 14, 15].includes(st) : st % 4 !== 0;
-      if (on) bass(T + s * 0.125, 0.11, m + (bar === 1 && st % 4 === 3 ? 12 : 0), { cut0: bar ? 2400 : 1500, vel: st % 4 === 2 ? 1 : 0.8 });
+    split(2.0, CH.Dm9); split(6.0, CH.Gm9, 12);
+    for (const x0 of [2.5, 6.5]) { const ch = x0 < 4 ? CH.Dm9 : CH.Gm9; for (let s = 0; s < 12; s++) play(x0 + s * 0.125, (t) => pluck(t, ch.arp[s % 5], 0.5 + 0.3 * (s % 4 === 0), s % 2 ? 0.35 : -0.35, { dec: 0.12, cut: 1800 + 260 * s, cutEnd: 500 })); }
+    // bar 3: the scissor — the white family swings out a fifth above; the weave front
+    play(4.0, (t) => pluck(t, 81, 0.95, 0.35, { bend: -5, bendT: 0.18, dec: 0.5, wet: 0.4 }));
+    for (let s = 0; s < 16; s++) play(4.0 + s * 0.125, (t) => pluck(t, CH.Bb.arp[s % 5], 0.55 + 0.35 * (s % 4 === 0), (s % 2 ? 0.35 : -0.35), { dec: 0.15, cut: 900 + 4500 * (s / 15), cutEnd: 500 }));
+    play(7.25, (t) => riser(t, t + 0.75, 0.16));
+    // bar 5: the ratchet — interference pad, beat frequency halves with every 16th
+    play(8.0, (t) => interference(t, t + 1.95, [50, 57, 65], (k) => 8 * Math.pow(2, -k)));
+    // bar 6: SIGNAL — stab, stretch-bend, comb-split stutter, rebuild
+    play(10.5, (t) => stab(t, CH.Dm9.pad, 0.32, { vel: 1.1, cut0: 7000, cut1: 1200 }));
+    play(11.0, (t) => stab(t, CH.Dm9.pad, 0.24, { vel: 0.8, bend: -2, cut0: 4000, cut1: 600 }));
+    for (let k = 0; k < 4; k++) play(11.25 + k * 0.0625, (t) => stab(t, CH.Dm9.pad, 0.045, { vel: 0.55, cut0: 3000, cut1: 1500, wet: 0.1 }));
+    play(11.5, (t) => stab(t, CH.Dm9.pad, 0.4, { vel: 1.0, cut0: 6500, cut1: 500, wet: 0.45 }));
+    // bar 7: relief — gated chords on 8ths, letters rising left to right (filter opens), pad swell
+    for (let k = 0; k < 8; k++) play(12.0 + k * 0.25, (t) => stab(t, CH.Bb9.pad, 0.16, { vel: 0.55 + 0.05 * k, cut0: 1500 + 900 * k, cut1: 700, wet: 0.3 }));
+    play(12.0, (t) => pad(t, 2.0, CH.Bb9.pad, { vel: 0.04, cut: 1800, att: 0.6, wet: 0.6 }));
+    // bar 8: the melt — the tonal filter dives; riser into the stretch
+    if (ok(14.0)) { tone.frequency.setValueAtTime(20000, at(14.0)); tone.frequency.exponentialRampToValueAtTime(420, at(15.2)); }
+    play(14.0, (t) => pad(t, 2.0, CH.A7s.pad, { vel: 0.05, cut: 2600, att: 0.1, wet: 0.55 }));
+    play(15.0, (t) => riser(t, t + 1.0, 0.18));
+
+    // ================= II · TERRAIN (bars 9-16)
+    // bars 9-10: no drums — the stretch. Arpeggios open with the filter; a drone holds the floor
+    if (ok(16.0)) { tone.frequency.setValueAtTime(420, at(16.0)); tone.frequency.exponentialRampToValueAtTime(20000, at(19.8)); }
+    play(16.0, (t) => sub(t, 3.95, 34, 0.28));
+    play(16.0, (t) => pad(t, 2.0, CH.Bb.pad, { vel: 0.035, cut: 2400, att: 0.4, wet: 0.65 }));
+    play(18.0, (t) => pad(t, 2.0, CH.Gm9.pad, { vel: 0.035, cut: 2800, att: 0.2, wet: 0.65 }));
+    for (let s = 0; s < 32; s++) { const ch = s < 16 ? CH.Bb : CH.Gm9; play(16.0 + s * 0.125, (t) => pluck(t, ch.arp[(s * 2) % 5] + (s % 8 >= 6 ? 12 : 0), 0.45 + 0.3 * (s % 4 === 0), (s % 2 ? 0.45 : -0.45), { dec: 0.18, cut: 700 + 160 * s, cutEnd: 450, wet: 0.45 })); }
+    play(19.0, (t) => riser(t, t + 0.6, 0.12));                 // the index sweep
+    play(18.5, (t) => riser(t, t + 1.5, 0.26));
+    play(19.75, (t) => swell(t, t + 0.25, 0.22));
+    // bar 11: DROP 1 — extrusion. Sub drop, crash, wide pad
+    play(20.0, (t) => { sub(t, 1.95, 26, 0.72, 12); crash(t, 0.32, 2.0); pad(t, 1.95, CH.Dm.pad, { vel: 0.05, cut: 1700, att: 0.06, wet: 0.6 }); stab(t, CH.Dm.pad, 0.5, { vel: 1.1, drive: 2.0, cut0: 8000, cut1: 900, wet: 0.45 }); });
+    for (let s = 0; s < 16; s += 2) play(20.0 + s * 0.125 + 0.0625, (t) => pluck(t, CH.Dm.arp[(s / 2) % 5], 0.55, (s % 4 ? 0.5 : -0.5), { dec: 0.3, cut: 3500, wet: 0.55 }));
+    // bars 12-15: groove with arps; the drape glides; the tectonic rumble
+    for (let s = 0; s < 64; s++) {
+      const bar = 11 + Math.floor(s / 16), st = s % 16, ch = chordAt(bar, Math.floor(st / 4));
+      if (bar === 13 && st < 12) continue;                      // the shift: arps give way to the rumble
+      if (st % 2 === 0) play(22.0 + s * 0.125 + 0.0625, (t) => pluck(t, ch.arp[(st / 2 + bar) % 5] + (st >= 12 ? 12 : 0), 0.5, (st % 4 ? 0.45 : -0.45), { dec: 0.22, cut: 3000 + 120 * st, wet: 0.45 }));
     }
-    // ---- bar 2: interference (beat rate halves with the moire angle), SIGNAL stab + stretch + stutter
-    interference(T + 2.0, T + 3.95, [50, 57, 65], (k) => 8 * Math.pow(2, -k));
-    stab(T + 2.5, DM9, 0.32, { vel: 1.1, cut0: 7000, cut1: 1200 });
-    stab(T + 3.0, DM9, 0.24, { vel: 0.8, bend: -2, cut0: 4000, cut1: 600 });
-    for (let k = 0; k < 4; k++) stab(T + 3.25 + k * 0.0625, DM9, 0.045, { vel: 0.55, cut0: 3000, cut1: 1500, wet: 0.1 });
-    stab(T + 3.5, DM9, 0.4, { vel: 1.0, cut0: 6500, cut1: 500, wet: 0.45 });
-    // ---- bar 3: contour arpeggio over Bbmaj7, filter opening as the rings close
-    const arp3 = [58, 62, 65, 69, 72, 69, 65, 62];
-    for (let s = 0; s < 16; s++) pluck(T + 4.0 + s * 0.125, arp3[s % 8], 0.6 + 0.4 * (s % 4 === 0), (s % 2 ? 0.35 : -0.35), { dec: 0.16, cut: 900 + 4500 * (s / 15), cutEnd: 500 });
-    for (let s = 0; s < 16; s++) if (s % 4 !== 0) bass(T + 4.0 + s * 0.125, 0.11, ROOT[2] + ([7, 12, 0][s % 3]) * (s % 4 === 3 ? 1 : 0), { cut0: 1200 + 120 * s });
-    riser(T + 5.25, T + 6.0, 0.16);
-    // ---- bar 4: DIMENSIONAL BREAKTHROUGH - sub drop, wide Gm9, half-time bass, arp continues
-    sub(T + 6.0, 1.95, 31, 0.7, 12);
-    pad(T + 6.0, 1.95, GM9, { vel: 0.045, cut: 1600, att: 0.08, wet: 0.6 });
-    crash(T + 6.0, 0.22, 1.8);
-    for (const s of [3, 6, 7, 10, 11, 14, 15]) bass(T + 6.0 + s * 0.125, 0.1, 31 + (s > 9 ? 12 : 0), { cut0: 900, vel: 0.85 });
-    const arp4 = [67, 70, 74, 77, 79, 77, 74, 70];
-    for (let s = 0; s < 16; s += 2) pluck(T + 6.0 + s * 0.125 + 0.0625, arp4[(s / 2) % 8], 0.55, (s % 4 ? 0.5 : -0.5), { dec: 0.3, cut: 3500, wet: 0.55 });
-    riser(T + 7.5, T + 8.0, 0.14);
-    // ---- bar 5: SYSTEM - mechanical 16ths, ticks for each projection line, Fmaj9 plucks
-    for (let s = 0; s < 16; s++) if (s % 4 !== 0) bass(T + 8.0 + s * 0.125, 0.07, ROOT[4] + (s % 4 === 2 ? 12 : 0), { cut0: 2600, cut1: 400, q: 9, vel: 0.85 });
-    for (let k = 0; k < 8; k++) tick(T + 8.95 + k * 0.0625, 3000 + k * 180, 0.9, -0.6 + k * 0.17);
-    for (let s = 0; s < 16; s++) tick(T + 8.0 + s * 0.125 + 0.0625, 5200, 0.35, s % 2 ? 0.5 : -0.5);
-    for (const b of [16, 17, 18, 19]) stab(T + B(b) + 0.25, FM9, 0.12, { vel: 0.5, cut0: 3800, cut1: 1400, width: 1, wet: 0.2 });
-    // the hook: rising three-note figure on the data points
-    [[9.0, 77], [9.125, 81], [9.25, 84], [9.5, 81], [9.625, 84], [9.75, 88]].forEach(([tt, m]) => pluck(T + tt, m, 0.7, 0.2, { dec: 0.18, cut: 6000 }));
-    // ---- bar 6: LIVING SYSTEM - A7sus4 -> A7, driving 16ths, riser + snare roll into the climax
-    for (let s = 0; s < 16; s++) if (s % 4 !== 0) bass(T + 10.0 + s * 0.125, 0.1, ROOT[5] + (s % 4 === 3 ? 12 : 0), { cut0: 1500 + 260 * s, cut1: 380, vel: 0.9 });
-    stab(T + 10.0, A7S, 0.2, { vel: 0.7, cut0: 4000, cut1: 1100 });
-    stab(T + 11.0, A7, 0.2, { vel: 0.75, cut0: 4500, cut1: 1100 });
-    for (let k = 0; k < 16; k++) tick(T + 10.0 + k * 0.125 + 0.0625, 4400 + (k % 4) * 300, 0.4, k % 2 ? 0.6 : -0.6);
-    [[10.25, 81], [10.375, 84], [10.5, 88], [11.25, 81], [11.375, 85], [11.5, 88]].forEach(([tt, m]) => pluck(T + tt, m, 0.65, -0.2, { dec: 0.16, cut: 6500 }));
-    riser(T + 11.0, T + 12.0, 0.3);
-    for (let k = 0; k < 4; k++) clap(T + 11.5 + 0.125 * k + 0.0625, 0.45 + 0.1 * k, 0.15);
-    for (let k = 0; k < 8; k++) clap(T + 11.75 + 0.03125 * k, 0.35 + 0.07 * k, 0.12);
-    // ---- bar 7: THE CLIMAX - stabs on every beat, distorted 16ths, D minor with octaves, sub, crash
-    crash(T + 12.0, 0.4, 2.2);
-    sub(T + 12.0, 2.0, 26, 0.75, 12);
-    [[12.0, 1.35, 0.5], [12.5, 1.0, 0.3], [13.0, 1.15, 0.36], [13.5, 1.0, 0.3]].forEach(([tt, v, d]) => stab(T + tt, DMC.concat([38]), d, { vel: v, drive: 2.4, cut0: 9000, cut1: 1200, width: 1, wet: 0.35 }));
-    for (let s = 0; s < 32; s++) if (s % 4 !== 0) bass(T + 12.0 + s * 0.125, 0.1, ROOT[6] + (s % 4 === 2 ? 12 : 0) + (s >= 24 && s % 4 === 3 ? 3 : 0), { cut0: 3400, cut1: 520, q: 8, vel: 1.05 });
-    [[12.25, 86], [12.375, 89], [12.5, 93], [13.25, 86], [13.375, 89], [13.5, 91], [13.75, 93]].forEach(([tt, m]) => pluck(T + tt, m, 0.75, 0.15, { dec: 0.2, cut: 7500, wet: 0.35 }));
-    // ---- final half bar: IDENTITY - Bbmaj9#11, stutter into the merge, reverse swell into the loop
-    pad(T + 14.0, 0.98, BBM9, { vel: 0.07, cut: 3200, att: 0.01, rel: 0.05, wet: 0.5 });
-    stab(T + 14.0, BBM9, 0.42, { vel: 1.0, cut0: 8000, cut1: 1500, wet: 0.55 });
-    sub(T + 14.0, 0.98, 34, 0.55);
-    for (let k = 0; k < 4; k++) stab(T + 14.75 + k * 0.0625, BBM9.map((m) => m - 12 * (k > 1)), 0.04, { vel: 0.5 - k * 0.07, cut0: 3000, cut1: 2000, wet: 0.15 });
-    swell(T + 14.5, T + 15.0, 0.26);
+    play(26.0, (t) => { rumble(t, t + 1.8, 0.3); stab(t, CH.Gm9.pad, 1.6, { vel: 0.6, bend: -1, cut0: 2600, cut1: 380, att: 0.25, wet: 0.6, drive: 2 }); });
+    play(28.0, (t) => pad(t, 1.95, CH.Bb.pad, { vel: 0.045, cut: 2600, att: 0.3, wet: 0.55 }));
+    play(29.0, (t) => riser(t, t + 1.0, 0.22));
+    play(30.0, (t) => { stab(t, CH.A7s.pad, 0.3, { vel: 0.8, cut0: 5000, cut1: 900, wet: 0.5 }); sub(t, 0.95, 33, 0.5); });
+    // bar 16: the terraces fall; one tick per projection line; the interface assembles
+    for (let k = 0; k < 8; k++) play(30.95 + k * 0.0625, (t) => tick(t, 3000 + k * 180, 0.9, -0.6 + k * 0.17));
+    play(31.0, (t) => { stab(t, CH.A7.pad, 0.2, { vel: 0.75, cut0: 4500, cut1: 1100 }); pad(t, 1.0, CH.A7.pad, { vel: 0.03, cut: 2200, att: 0.15, rel: 0.1, wet: 0.6 }); });
+    for (let k = 0; k < 6; k++) play(31.05 + k * 0.04, (t) => tick(t, 4200 + k * 240, 0.6, 0.4));
+    play(31.25, (t) => riser(t, t + 0.75, 0.2));
+
+    // ================= III · SYSTEM (bars 17-24)
+    // bar 17: mechanical groove on F, a tick on every 16th off-beat, the rising hook
+    for (let s = 0; s < 16; s++) play(32.0 + s * 0.125 + 0.0625, (t) => tick(t, 5200, 0.35, s % 2 ? 0.5 : -0.5));
+    for (const b of [64, 65, 66, 67]) play(B(b) + 0.25, (t) => stab(t, CH.F.pad, 0.12, { vel: 0.5, cut0: 3800, cut1: 1400, width: 1, wet: 0.2 }));
+    const hook = (x0, ms, p = 0.2) => ms.forEach(([dx, m]) => play(x0 + dx, (t) => pluck(t, m, 0.7, p, { dec: 0.18, cut: 6000 })));
+    hook(33.0, [[0, 77], [0.125, 81], [0.25, 84], [0.5, 81], [0.625, 84], [0.75, 88]]);
+    // bar 18: EXPLODE
+    play(34.0, (t) => { crash(t, 0.36, 2.2); sub(t, 1.9, 26, 0.7, 14); stab(t, CH.Dm9.pad.concat([38]), 0.55, { vel: 1.2, drive: 2.2, cut0: 9000, cut1: 900, width: 1, wet: 0.5 }); riser(t, t + 0.8, 0.1); });
+    for (let s = 0; s < 16; s++) play(34.0 + s * 0.125 + 0.0625, (t) => tick(t, 4400 + (s % 4) * 300, 0.4, s % 2 ? 0.6 : -0.6));
+    // bar 19: the section jumps north, then south; the letter drum rolls
+    hook(36.0, [[0, 81], [0.125, 84], [0.25, 88]], -0.3); hook(37.0, [[0, 77], [0.125, 74], [0.25, 69]], 0.3);
+    for (const x0 of [36.0, 37.0]) for (let k = 0; k < 5; k++) play(x0 + k * 0.03, (t) => tick(t, 3600 + k * 300, 0.6, 0.6));
+    for (let s = 0; s < 16; s++) play(36.0 + s * 0.125 + 0.0625, (t) => tick(t, 5200, 0.3, s % 2 ? 0.5 : -0.5));
+    // bar 20: fly-through — no floor, the tonal filter dips and returns; a slow Gm9 pad
+    if (ok(38.0)) { tone.frequency.setValueAtTime(20000, at(38.0)); tone.frequency.exponentialRampToValueAtTime(650, at(38.6)); tone.frequency.setValueAtTime(650, at(39.3)); tone.frequency.exponentialRampToValueAtTime(20000, at(40.0)); }
+    play(38.0, (t) => { pad(t, 2.0, CH.Gm9.pad, { vel: 0.06, cut: 3000, att: 0.3, wet: 0.7 }); sub(t, 1.95, 31, 0.45); });
+    for (let s = 0; s < 16; s++) play(38.0 + s * 0.125, (t) => pluck(t, CH.Gm9.arp[s % 5] + 12, 0.45, (s % 2 ? 0.6 : -0.6), { dec: 0.25, cut: 5000, wet: 0.6 }));
+    play(39.5, (t) => swell(t, t + 0.5, 0.2));
+    // bar 21: the chart hinges up (A7sus4), A7 a beat later
+    play(40.0, (t) => stab(t, CH.A7s.pad, 0.28, { vel: 0.85, cut0: 5000, cut1: 1100, wet: 0.4 }));
+    play(41.0, (t) => stab(t, CH.A7.pad, 0.28, { vel: 0.9, cut0: 5000, cut1: 1100, wet: 0.4 }));
+    hook(40.25, [[0, 81], [0.125, 84], [0.25, 88]]); hook(41.25, [[0, 81], [0.125, 85], [0.25, 88]], -0.2);
+    // bar 22: the scan — a stab on every section step, letter drum spinning
+    [42.0, 42.125, 42.25, 42.375].forEach((x, i) => play(x, (t) => stab(t, CH.Dm.pad.map((m) => m + [0, 2, 3, 5][i]), 0.1, { vel: 0.75, cut0: 6000, cut1: 1500, wet: 0.2 })));
+    play(43.0, (t) => stab(t, CH.Dm.pad, 0.3, { vel: 0.85, cut0: 6000, cut1: 900, wet: 0.4 }));
+    play(43.0, (t) => riser(t, t + 1.0, 0.2));
+    // bar 23: panels dock; the map splits 1 -> 32 on 16ths (the thread's motif returns)
+    play(44.35, (t) => whoosh(t, t + 0.65, 0.22));
+    [[0, 1], [0.125, 2], [0.25, 4], [0.375, 8], [0.5, 16]].forEach(([dx, n]) => {
+      for (let k = 0; k < n; k++) play(45.0 + dx + k * (0.125 / n), (t) => pluck(t, CH.Bb.arp[(k + n) % 5] + 12 - (n > 4 ? 12 : 0) - (n > 8 ? 12 : 0), 0.7, (k % 2 ? 0.5 : -0.5), { dec: 0.1, cut: 5000 }));
+    });
+    // bar 24: the streets open; riser into the city
+    for (let s = 0; s < 16; s++) play(46.0 + s * 0.125, (t) => pluck(t, chordAt(23, Math.floor(s / 4)).arp[s % 5], 0.45 + 0.03 * s, s % 2 ? 0.4 : -0.4, { dec: 0.14, cut: 1500 + 300 * s }));
+    play(46.5, (t) => riser(t, t + 1.5, 0.28));
+    play(47.75, (t) => swell(t, t + 0.25, 0.2));
+
+    // ================= IV · NETWORK (bars 25-31)
+    play(48.0, (t) => { crash(t, 0.3, 2.0); sub(t, 1.95, 26, 0.65, 12); pad(t, 1.95, CH.Dm9.pad, { vel: 0.04, cut: 2000, att: 0.05, wet: 0.6 }); });
+    for (let k = 0; k < 12; k++) play(48.0 + k * 0.0625, (t) => pluck(t, CH.Dm9.arp[k % 5] + 12 * Math.floor(k / 5), 0.55, -0.6 + k * 0.1, { dec: 0.12, cut: 6000 }));   // the towers rise, centre out
+    // the sequence: a 16th arp that the data pulses ride (bars 26-29); pings on every launch
+    for (let s = 0; s < 96; s++) {
+      const x = 50.0 + s * 0.125, bar = Math.floor(x / 2), st = s % 16, ch = chordAt(bar, Math.floor(st / 4));
+      const down = x >= 56.0;                                         // converge: the figure runs downhill
+      const idx = down ? 4 - (st % 5) : st % 5;
+      play(x, (t) => pluck(t, ch.arp[idx] + (st % 8 >= 6 ? 12 : 0), 0.4 + 0.25 * (st % 4 === 0) + (x >= 52 ? 0.08 : 0), (st % 2 ? 0.5 : -0.5), { dec: 0.1, cut: 2500 + 2500 * ((s % 32) / 31), wet: 0.3 }));
+      if (x >= 50.5 && x < 57.0 && st % 2 === 1) play(x + 0.0625, (t) => ping(t, 96 + (st % 3) * 3, 0.35, st % 4 === 1 ? 0.7 : -0.7));
+    }
+    for (let k = 0; k < 8; k++) play(52.0 + k * 0.03, (t) => tick(t, 3800 + k * 200, 0.5, -0.5));        // labels roll in
+    for (let k = 0; k < 6; k++) play(54.0 + k * 0.375, (t) => ping(t, 93 + [0, 3, 5, 7, 10, 12][k], 0.55, k % 2 ? 0.6 : -0.6));   // 3 over 4: the activation wave
+    play(56.0, (t) => pad(t, 2.0, CH.Bb9.pad, { vel: 0.06, cut: 3200, att: 1.2, rel: 0.1, wet: 0.6 }));
+    // bar 30: reassembly — towers lower, streets close, 32 -> 1 merges with halving stutters
+    play(58.0, (t) => { stab(t, CH.A7s.pad, 0.5, { vel: 0.8, bend: -1, cut0: 4500, cut1: 600, wet: 0.45 }); });
+    [59.3, 59.425, 59.55, 59.675, 59.8].forEach((x, i) => play(x, (t) => stab(t, CH.A7s.pad.map((m) => m + 12 - 3 * i), 0.06 + 0.02 * i, { vel: 0.7 - 0.06 * i, cut0: 5000 - 700 * i, cut1: 1400, wet: 0.2 })));
+    // bar 31: the camera holds; section scan on 16ths; the roll into drop 2
+    play(60.0, (t) => { stab(t, CH.A7.pad, 0.25, { vel: 0.8, cut0: 5000, cut1: 1100, wet: 0.45 }); sub(t, 1.95, 33, 0.45); });
+    [60.5, 60.625, 60.75, 60.875].forEach((x, i) => play(x, (t) => tick(t, 2600 + i * 500, 1.0, -0.4 + i * 0.27)));
+    play(60.5, (t) => riser(t, t + 1.5, 0.32));
+    play(61.75, (t) => swell(t, t + 0.25, 0.26));
+
+    // ================= V · MONUMENT + IDENTITY (bars 32-37½)
+    play(62.0, (t) => { crash(t, 0.42, 2.4); sub(t, 1.95, 26, 0.8, 12); });
+    for (let bar = 31; bar <= 33; bar++) {
+      const ch = chordAt(bar), x0 = bar * 2, stabs = bar === 31 ? [[0, 1.35, 0.5], [0.5, 1.0, 0.3], [1.0, 1.15, 0.36], [1.5, 1.0, 0.3]] : [[0, 1.15, 0.36], [1.0, 1.05, 0.3]];
+      stabs.forEach(([dx, v, d]) => play(x0 + dx, (t) => stab(t, (ch === CH.Dm ? CH.Dm.pad : ch.pad.map((m) => m + 12)).concat([ch.root]), d, { vel: v, drive: 2.4, cut0: 9000, cut1: 1200, width: 1, wet: 0.35 })));
+      if (bar > 31) play(x0, (t) => sub(t, 1.95, ch.root - 12, 0.6));
+    }
+    play(62.5, (t) => stab(t, [50, 57, 62, 65, 69, 74], 0.3, { vel: 1.2, drive: 2.6, cut0: 10000, cut1: 1500, width: 1, wet: 0.3 }));   // the slam
+    const LEAD = [[0.25, 86], [0.375, 89], [0.5, 93], [1.25, 86], [1.375, 89], [1.5, 91], [1.75, 93]];
+    for (let bar = 31; bar <= 33; bar++) LEAD.forEach(([dx, m]) => play(bar * 2 + dx, (t) => pluck(t, m - (bar === 32 ? 4 : bar === 33 ? 7 : 0), 0.75, 0.15, { dec: 0.2, cut: 7500, wet: 0.35 })));
+    // bar 35: the heights compress as the view rises to plan
+    play(68.0, (t) => { stab(t, CH.A7s.pad.map((m) => m + 12), 0.4, { vel: 0.9, cut0: 6000, cut1: 900, wet: 0.5 }); sub(t, 0.95, 33, 0.55); });
+    play(69.0, (t) => { stab(t, CH.A7.pad.map((m) => m + 12), 0.4, { vel: 0.95, cut0: 6000, cut1: 900, wet: 0.5 }); sub(t, 0.95, 33, 0.55); });
+    play(68.6, (t) => riser(t, t + 1.4, 0.26));
+    // bars 36-37: ISOLINE — Bbmaj9#11 held; the rings breathe on every beat; the subtitle rolls in and out
+    play(70.0, (t) => { pad(t, 4.45, CH.Bb11.pad, { vel: 0.045, cut: 3200, att: 0.01, rel: 0.4, wet: 0.55 }); stab(t, CH.Bb11.pad, 0.6, { vel: 1.0, cut0: 8000, cut1: 1500, wet: 0.6 }); sub(t, 4.45, 34, 0.32); crash(t, 0.22, 2.6); });
+    for (let b = 140; b < 149; b++) play(B(b), (t) => ping(t, [77, 81, 84, 88][(b - 140) % 4] + 12, 0.22, (b % 2 ? 0.5 : -0.5)));
+    for (let k = 0; k < 10; k++) play(70.5 + k * 0.05, (t) => tick(t, 3200 + k * 160, 0.45, -0.7 + k * 0.15));
+    for (let k = 0; k < 10; k++) play(73.0 + k * 0.04, (t) => tick(t, 4800 - k * 160, 0.4, 0.7 - k * 0.15));
+    // final half bar: rings contract, stripes, stutter-merge 16 -> 1, reverse swell into the loop
+    play(74.0, (t) => stab(t, CH.Bb11.pad, 0.42, { vel: 0.9, cut0: 8000, cut1: 1500, wet: 0.55 }));
+    for (let k = 0; k < 4; k++) play(74.75 + k * 0.0625, (t) => stab(t, CH.Bb11.pad.map((m) => m - 12 * (k > 1)), 0.04, { vel: 0.5 - k * 0.07, cut0: 3000, cut1: 2000, wet: 0.15 }));
+    play(74.5, (t) => swell(t, t + 0.5, 0.26));
   }
-  for (let c = 0; c < NC; c++) compose(c * CYCLE);
+  // pre-roll: the last bars of the previous cycle (their tails cross the seam), then the kept cycle(s)
+  for (let c = 0; c < NC; c++) { MIN = c === 0 ? (CYCLE - PRE) : -1e9; compose(c * CYCLE); }
+  // Just-in-time graph: every event's nodes are created at least LEAD seconds before it sounds, at deterministic
+  // suspend points. A graph built all at once would keep tens of thousands of idle nodes alive for the whole render.
+  EV.sort((a, b) => a[0] - b[0]);
+  const STEP = 1, LEAD = 0.5;
+  let cur = 0;
+  const upTo = (tEnd) => { while (cur < EV.length && EV[cur][0] < tEnd) { const [t, fn] = EV[cur++]; fn(t); } };
+  upTo(STEP + LEAD);
+  for (let k = 1; k * STEP < LEN; k++) ctx.suspend(k * STEP).then(() => { upTo((k + 1) * STEP + LEAD); ctx.resume(); });
 
   const buf = await ctx.startRendering();
   if (opts.verify) {   // is cycle 3 a sample-exact continuation of cycle 2 in the same way cycle 2 follows cycle 1?
@@ -2087,17 +2749,19 @@ window.renderSoundtrack = async (opts = {}) => {
    ===================================================================== */
 async function init() {
   await Text.init();
-  FIELDS.terr = buildTerrain();
+  FIELDS.terr = buildTerrain(TERRAIN_A, 1907);
   TEX.terr = fieldTexture(FIELDS.terr, GX, GY);
+  FIELDS.terr2 = buildTerrain(TERRAIN_B, 1907);
+  TEX.terr2 = fieldTexture(FIELDS.terr2, GX, GY);
   const sig = await buildWordField('SIGNAL', 'IDB', 900, 2.86, 0.0);
   FIELDS.sig = sig; TEX.sig = fieldTexture(sig.G, GX, GY);
   const tit = await buildWordField('ISOLINE', 'IDB', 900, 2.62, 0.0);
   FIELDS.tit = tit; TEX.tit = fieldTexture(tit.G, GX, GY);
-  FieldPlane.init(); Terraces.init(); Lines.init(); Fills.init();
+  FieldPlane.init(); Terraces.init(); Lines.init(); Fills.init(); Solids.init(); MapSurf.init(); Glyph3D.init();
   if (typeof sceneInit === 'function') sceneInit();
 }
 
-// wrap only outside [0, 15] so that seek(15) is genuinely evaluated by the closing motion
+// wrap only outside [0, DUR] so that seek(DUR) is genuinely evaluated by the closing motion
 const wrapT = (t) => (t < 0 || t > DUR ? ((t % DUR) + DUR) % DUR : t);
 window.seek = (t) => { renderFrame(wrapT(t)); gl.finish(); return true; };
 

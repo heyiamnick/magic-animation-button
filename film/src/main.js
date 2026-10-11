@@ -6,17 +6,19 @@
    ===================================================================== */
 async function init() {
   await Text.init();
-  FIELDS.terr = buildTerrain();
+  FIELDS.terr = buildTerrain(TERRAIN_A, 1907);
   TEX.terr = fieldTexture(FIELDS.terr, GX, GY);
+  FIELDS.terr2 = buildTerrain(TERRAIN_B, 1907);
+  TEX.terr2 = fieldTexture(FIELDS.terr2, GX, GY);
   const sig = await buildWordField('SIGNAL', 'IDB', 900, 2.86, 0.0);
   FIELDS.sig = sig; TEX.sig = fieldTexture(sig.G, GX, GY);
   const tit = await buildWordField('ISOLINE', 'IDB', 900, 2.62, 0.0);
   FIELDS.tit = tit; TEX.tit = fieldTexture(tit.G, GX, GY);
-  FieldPlane.init(); Terraces.init(); Lines.init(); Fills.init();
+  FieldPlane.init(); Terraces.init(); Lines.init(); Fills.init(); Solids.init(); MapSurf.init(); Glyph3D.init();
   if (typeof sceneInit === 'function') sceneInit();
 }
 
-// wrap only outside [0, 15] so that seek(15) is genuinely evaluated by the closing motion
+// wrap only outside [0, DUR] so that seek(DUR) is genuinely evaluated by the closing motion
 const wrapT = (t) => (t < 0 || t > DUR ? ((t % DUR) + DUR) % DUR : t);
 window.seek = (t) => { renderFrame(wrapT(t)); gl.finish(); return true; };
 

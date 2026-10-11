@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const parts = ['engine.js', 'fields.js', 'render.js', 'text.js', 'scene.js', 'audio.js', 'main.js'];
+const parts = ['engine.js', 'fields.js', 'render.js', 'text.js', 'solids.js', 'scene_core.js', 'scene_terrain.js', 'scene_system.js', 'audio.js', 'main.js'];
 const fonts = readFileSync(join(root, 'build/fonts.js'), 'utf8');
 let js = '';
 for (const p of parts) {
@@ -16,7 +16,7 @@ const html = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ISOLINE — Thread → Signal → Terrain → System</title>
+<title>ISOLINE — Thread → Signal → Terrain → System → Network</title>
 <style>html,body{margin:0;height:100%;background:#0A0A0B;overflow:hidden}canvas{display:block;position:absolute;left:0;top:0}</style>
 </head>
 <body>
