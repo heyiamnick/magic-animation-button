@@ -127,11 +127,12 @@ if (cmd === 'stills') {
   const list = join(tmp, 'list.txt');
   writeFileSync(list, files.map((f) => `file '${f}'`).join('\n') + '\n');
   const out = resolve(args.out || join(ROOT, 'final.mp4'));
+  // Matroska stores ms timestamps (16/17 ms at 60 fps): retime by frame index (settb/setpts below) so no frame is dropped or doubled
   const vin = ['-f', 'concat', '-safe', '0', '-i', list];
   const ain = args.audio ? ['-i', resolve(args.audio)] : [];
   const vopts = ['-c:v', 'libx264', '-preset', 'slow', '-tune', 'animation', '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-level', '4.2',
     '-g', '30', '-keyint_min', '30', '-bf', '2', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv',
-    '-vf', 'scale=out_color_matrix=bt709:out_range=tv,format=yuv420p', '-r', String(FPS), '-frames:v', String(frames)];
+    '-vf', `settb=1/${FPS},setpts=N,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p`, '-r', String(FPS), '-frames:v', String(frames)];
   const aopts = args.audio ? ['-map', '0:v:0', '-map', '1:a:0', '-c:a', 'aac', '-b:a', '384k', '-ar', '48000', '-ac', '2'] : [];
   const run = (argv) => new Promise((res, rej) => { const p = spawn('ffmpeg', argv, { stdio: ['ignore', 'ignore', 'inherit'] }); p.on('close', (c) => (c === 0 ? res() : rej(new Error('ffmpeg ' + c)))); });
   if (args['target-mb']) {
