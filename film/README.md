@@ -4,7 +4,7 @@ A 75-second, 1920×1080, 60 fps procedural motion-design film with an original 1
 
 | File | What it is |
 |---|---|
-| `final.mp4` | **The film, ready to download and upload.** H.264 High, 1920×1080, 60 fps, 4500 frames, 75.000 s, BT.709, AAC-LC 48 kHz stereo 384 kb/s, fast start. Size: under 100 MiB (the render of this 75 s cut is being committed separately). |
+| `final.mp4` | **The film, ready to download and upload.** H.264 High, 1920×1080, 60 fps, 4500 frames, 75.000 s, BT.709, AAC-LC 48 kHz stereo 384 kb/s, fast start. Size: 93.4 MB (89.0 MiB), about 10 Mb/s. |
 | `soundtrack.wav` | The original soundtrack. 48 kHz, stereo, 16-bit PCM, 75.000 s. It loops seamlessly. |
 | `index.html` | The self-contained film (WebGL2 + Web Audio), with fonts, shaders and synth inlined. Open it and click to play with sound. |
 | `storyboard.md` | The concept, visual direction, the 37½-bar storyboard (5 movements) and the continuity map. |
@@ -24,9 +24,11 @@ The file is encoded to the upload recommendations of the big platforms, so you c
 | Where | How | Fits? |
 |---|---|---|
 | **YouTube** | Upload `final.mp4`. | Matches YouTube's recommended upload settings for 1080p60: MP4, H.264 High, progressive, 4:2:0, fast start, AAC-LC 48 kHz stereo at 384 kb/s. |
-| **X (Twitter)** | Attach it to a post. | 75 s and under 100 MB are under X's limits for standard accounts (2 min 20 s, 512 MB). |
+| **X (Twitter)** | Attach it to a post. | 75 s and 93 MB are under X's limits for standard accounts (2 min 20 s, 512 MB). |
 | **Google Drive / Dropbox / iCloud** | Upload the file. | Any size works; Drive previews 1080p video. |
 | **Instagram / LinkedIn / others** | Upload `final.mp4`. | Standard H.264/AAC MP4; each platform re-encodes on upload. |
+
+**Quality.** Compared frame by frame with the lossless render, the encode averages SSIM-Y 0.986 and PSNR 39 dB; its weakest frame (the dense 256-line weave at 6.3 s) is SSIM-Y 0.93. The bitrate is distributed by a two-pass encode with no peak cap, so the moiré gratings borrow bits from the flat 3D scenes.
 
 **Why the file is in the repo and not somewhere else:** GitHub rejects any single file over 100 MiB in a normal push, and warns above 50 MiB. `final.mp4` is encoded with two-pass H.264 to land under 100 MiB, so it can live in the repository and be downloaded directly with no extra setup. Larger files would need Git LFS (up to 2 GB per file on GitHub Free, 10 GiB of LFS storage and bandwidth per month) or a GitHub Release asset (each file under 2 GiB).
 
@@ -57,11 +59,11 @@ node tools/render.mjs audio --out soundtrack.wav          # OfflineAudioContext 
 node tools/render.mjs audio --verify                      # 3 cycles: seam must be sample-exact
 python3 tools/analyze_audio.py soundtrack.wav             # levels per bar, clipping, seam
 node tools/render.mjs final --splits 300,600,900,1200,1500,1800,2100,2400,2700,3000,3300,3600,3900,4200 \
-     --parallel 4 --audio soundtrack.wav --target-mb 97 --out final.mp4
+     --parallel 4 --audio soundtrack.wav --target-mb 97 --out final.mp4   # about 2.5 h on 4 CPU cores (SwiftShader)
 python3 tools/verify_final.py final.mp4 soundtrack.wav 75 100
 python3 tools/final_contact_sheet.py final.mp4 contact-sheet.png
 ```
 
-`final` renders lossless FFV1 chunks (resumable: finished chunks are reused), then encodes. With `--target-mb` it runs a two-pass encode sized to that many megabytes; without it, it uses `--crf` (default 17). For a quick look, use `node tools/render.mjs preview --w 480 --h 270 --fps 30 --out preview.mp4`, then `python3 tools/motion_check.py diff preview.mp4` to flag frame-to-frame pops.
+`final` renders lossless FFV1 chunks (resumable: finished chunks are reused), retimes them by frame index (Matroska keeps only millisecond timestamps), then encodes. With `--target-mb` it runs a two-pass encode sized to that many megabytes; without it, it uses `--crf` (default 17). For a quick look, use `node tools/render.mjs preview --w 480 --h 270 --fps 30 --out preview.mp4`, then `python3 tools/motion_check.py diff preview.mp4` to flag frame-to-frame pops.
 
 Fonts are Inter (SIL Open Font License), subset and inlined. To rebuild `build/fonts.js`, run `python3 tools/subset_fonts.py`; it needs fontTools and the Inter OTFs.
