@@ -140,8 +140,11 @@ if (cmd === 'stills') {
     const vk = Math.floor((totalBits / dur - (args.audio ? 384e3 : 0)) / 1000);
     const passlog = join(tmp, 'x264pass');
     console.log(`two-pass target ${args['target-mb']} MB -> video ${vk} kb/s`);
-    await run(['-y', '-loglevel', 'error', ...vin, ...vopts, '-b:v', vk + 'k', '-maxrate', Math.round(vk * 1.6) + 'k', '-bufsize', Math.round(vk * 2) + 'k', '-pass', '1', '-passlogfile', passlog, '-an', '-f', 'null', '/dev/null']);
-    await run(['-y', '-loglevel', 'error', ...vin, ...ain, ...vopts, '-b:v', vk + 'k', '-maxrate', Math.round(vk * 1.6) + 'k', '-bufsize', Math.round(vk * 2) + 'k', '-pass', '2', '-passlogfile', passlog, ...aopts, '-movflags', '+faststart', '-t', String(dur), out]);
+    // no VBV cap: the 256-line moire gratings need several times the average rate for a second or two, and the flat
+    // 3D sections need far less. qcomp 0.8 lets the two-pass move bits from the simple scenes into the complex ones.
+    const rc = ['-b:v', vk + 'k', '-x264-params', `qcomp=${args.qcomp || 0.8}`];
+    await run(['-y', '-loglevel', 'error', ...vin, ...vopts, ...rc, '-pass', '1', '-passlogfile', passlog, '-an', '-f', 'null', '/dev/null']);
+    await run(['-y', '-loglevel', 'error', ...vin, ...ain, ...vopts, ...rc, '-pass', '2', '-passlogfile', passlog, ...aopts, '-movflags', '+faststart', '-t', String(dur), out]);
   } else {
     await run(['-y', '-loglevel', 'error', ...vin, ...ain, ...vopts, '-crf', String(args.crf || 17), ...aopts, '-movflags', '+faststart', '-t', String(dur), out]);
   }
