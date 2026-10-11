@@ -1,0 +1,1360 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hollow Light — Motion Showreel</title>
+<meta name="viewport" content="width=1920,height=1080">
+<style>
+  html, body { margin: 0; padding: 0; background: #0B0B0C; overflow: hidden; }
+  canvas { display: block; width: 1920px; height: 1080px; }
+</style>
+</head>
+<body>
+<canvas id="stage" width="1920" height="1080"></canvas>
+<script>
+"use strict";
+/*
+  HOLLOW LIGHT — a 15 s motion showreel at 120 BPM.
+  Leonardo's 1509 hollow icosahedron: archival sketch -> wireframe -> scanline hologram -> end title.
+
+  Contract: window.seek(t) paints the frame for time t (seconds). Everything is a pure function of t:
+  no CSS animation, no timers, no state carried between frames. Precomputed tables below are constants.
+*/
+const FONT_URL = "__GEIST_WOFF2__";
+
+// ───────────────────────────── constants ─────────────────────────────
+const W = 1920, H = 1080, CX = W / 2, CY = H / 2;
+const BPM = 120, BEAT = 60 / BPM, DUR = 15;
+const COL = { black: '#0B0B0C', paper: '#F2EDE3', sepia: '#6B4426', verm: '#E8441E', cyan: '#4FF0E1' };
+const RGB = {};
+for (const k in COL) RGB[k] = [1, 3, 5].map(i => parseInt(COL[k].slice(i, i + 2), 16));
+const TITLE = 'SHOWREEL', SUBTITLE = 'MOTION DESIGN — 2026';
+const PHI = (1 + Math.sqrt(5)) / 2, TAU = Math.PI * 2, DEG = Math.PI / 180;
+const DRIFT = 0.035;         // camera creep between pushes (log-scale / s)
+const SHUTTER = 1 / 360;     // per-subframe shutter; 3 subframes x 1/360 s = 180 deg at 60 fps
+
+// ───────────────────────────── easing (all functions of time) ─────────────────────────────
+const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
+const lerp = (a, b, k) => a + (b - a) * k;
+const ph = (t, t0, d) => clamp((t - t0) / d);
+const expoOut = x => x <= 0 ? 0 : x >= 1 ? 1 : (1 - Math.pow(2, -10 * x)) / (1 - Math.pow(2, -10));
+const expoIn = x => x <= 0 ? 0 : x >= 1 ? 1 : (Math.pow(2, 10 * x) - 1) / (Math.pow(2, 10) - 1);
+const expoInOut = x => x <= 0 ? 0 : x >= 1 ? 1 : x < 0.5 ? expoIn(2 * x) / 2 : 0.5 + expoOut(2 * x - 1) / 2;
+const smoother = x => (x = clamp(x), x * x * x * (x * (6 * x - 15) + 10));
+const warp = (x, p) => Math.pow(clamp(x), p);
+// damped spring step response; zeta .82 settles with ~1% overshoot (snappy, never bouncy)
+function spring(dt, f = 2.6, z = 0.82) {
+  if (dt <= 0) return 0;
+  const w = TAU * f, wd = w * Math.sqrt(1 - z * z);
+  return 1 - Math.exp(-z * w * dt) * (Math.cos(wd * dt) + (z * w / wd) * Math.sin(wd * dt));
+}
+const sp = (t, t0, f, z) => spring(t - t0, f, z);
+const eo = (t, t0, d) => expoOut(ph(t, t0, d));
+const ei = (t, t0, d) => expoIn(ph(t, t0, d));
+const eio = (t, t0, d) => expoInOut(ph(t, t0, d));
+const mix = (a, b, k) => `rgb(${Math.round(lerp(RGB[a][0], RGB[b][0], k))},${Math.round(lerp(RGB[a][1], RGB[b][1], k))},${Math.round(lerp(RGB[a][2], RGB[b][2], k))})`;
+const hash = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+const wrapT = t => ((t % DUR) + DUR) % DUR;
+
+// ───────────────────────────── 3D ─────────────────────────────
+const v3 = {
+  add: (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]],
+  sub: (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]],
+  mul: (a, s) => [a[0] * s, a[1] * s, a[2] * s],
+  dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2],
+  cross: (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]],
+  len: a => Math.hypot(a[0], a[1], a[2]),
+  norm: a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; },
+};
+const RX = a => { const c = Math.cos(a), s = Math.sin(a); return [1, 0, 0, 0, c, -s, 0, s, c]; };
+const RY = a => { const c = Math.cos(a), s = Math.sin(a); return [c, 0, s, 0, 1, 0, -s, 0, c]; };
+const MM = (A, B) => {
+  const r = new Array(9);
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++)
+    r[i * 3 + j] = A[i * 3] * B[j] + A[i * 3 + 1] * B[3 + j] + A[i * 3 + 2] * B[6 + j];
+  return r;
+};
+const MV = (M, v) => [M[0] * v[0] + M[1] * v[1] + M[2] * v[2], M[3] * v[0] + M[4] * v[1] + M[5] * v[2], M[6] * v[0] + M[7] * v[1] + M[8] * v[2]];
+// rotate v about unit axis k by angle a (Rodrigues)
+const rotAxis = (v, k, a) => {
+  const c = Math.cos(a), s = Math.sin(a), kv = v3.cross(k, v), d = v3.dot(k, v) * (1 - c);
+  return [v[0] * c + kv[0] * s + k[0] * d, v[1] * c + kv[1] * s + k[1] * d, v[2] * c + kv[2] * s + k[2] * d];
+};
+// eye at (0,0,D) looking down -Z; F = focal length in px
+const project = (p, cam) => { const d = cam.D - p[2]; return { x: cam.cx + cam.F * p[0] / d, y: cam.cy - cam.F * p[1] / d, d }; };
+
+// Icosahedron: 12 vertices are the corners of three mutually perpendicular golden rectangles (Pacioli, 1509).
+const ICO = (() => {
+  const V = [[PHI, 1, 0], [-PHI, 1, 0], [-PHI, -1, 0], [PHI, -1, 0],
+             [0, PHI, 1], [0, -PHI, 1], [0, -PHI, -1], [0, PHI, -1],
+             [1, 0, PHI], [-1, 0, PHI], [-1, 0, -PHI], [1, 0, -PHI]];
+  const adj = (i, j) => Math.abs(v3.len(v3.sub(V[i], V[j])) - 2) < 1e-6;
+  const E = [], F = [];
+  for (let i = 0; i < 12; i++) for (let j = i + 1; j < 12; j++) if (adj(i, j)) E.push([i, j]);
+  for (let i = 0; i < 12; i++) for (let j = i + 1; j < 12; j++) for (let k = j + 1; k < 12; k++)
+    if (adj(i, j) && adj(j, k) && adj(i, k)) {
+      const n = v3.cross(v3.sub(V[j], V[i]), v3.sub(V[k], V[i]));
+      const c = v3.mul(v3.add(v3.add(V[i], V[j]), V[k]), 1 / 3);
+      F.push(v3.dot(n, c) > 0 ? [i, j, k] : [i, k, j]);
+    }
+  return { V, E, F, R: Math.sqrt(1 + PHI * PHI) };
+})();
+const RECTS = [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]];
+const LIGHT_DIR = v3.norm([-0.45, 0.62, 0.64]);
+const F0 = 8 * 165, D0 = 8;   // base focal length / camera distance (1 model unit = 165 px at the origin)
+
+// ───────────────────────────── camera language ─────────────────────────────
+// Forward-only. Each bar line is an exponential push-in (log-space ease) through a detail of the
+// previous shot; between pushes the camera creeps forward at DRIFT.
+const TITLE_K = 60;                       // the title's period opens 60x into the sketch sheet
+const SEAM = 0.58;                       // the opening push completes here (paper fills the frame by ~0.47 s)
+const seamLog = u => DRIFT * u + Math.log(TITLE_K) * smoother(warp(u / SEAM, 1.25));
+const PUSHES = [  // [start, duration, factor, warp]
+  [1.60, 0.46, 17, 1.15],   // B4 -> B5  into the caption word INK
+  [3.58, 0.46, 1.42, 1.2],  // B8 -> B9  into the stem of the I
+  [5.96, 0.42, 1.06, 1],    // B13       the rectangle tips into depth
+  [7.98, 0.45, 1.10, 1],    // B17       data
+  [9.98, 0.45, 1.08, 1],    // B21       light
+  [11.98, 0.40, 1.16, 1],   // B25       impact
+];
+function camLog(t) {
+  let L = seamLog(t) - Math.log(TITLE_K);
+  for (const [t0, d, m, w] of PUSHES) L += Math.log(m) * smoother(warp((t - t0) / d, w));
+  return L;
+}
+const cam = t => Math.exp(camLog(t));
+
+// ───────────────────────────── canvas, font, metrics ─────────────────────────────
+const stage = document.getElementById('stage');
+const main = stage.getContext('2d');
+const accCanvas = document.createElement('canvas'); accCanvas.width = W; accCanvas.height = H;
+const acc = accCanvas.getContext('2d', { willReadFrequently: true });
+const layerCanvas = document.createElement('canvas'); layerCanvas.width = W; layerCanvas.height = H;
+const layer = layerCanvas.getContext('2d');
+const maskCanvas = document.createElement('canvas'); maskCanvas.width = W; maskCanvas.height = H;
+const maskCtx = maskCanvas.getContext('2d');
+let SUM = null;
+
+const setFont = (ctx, w, size) => { ctx.font = `${Math.round(clamp(w, 100, 900))} ${size}px Geist`; ctx.letterSpacing = '0px'; ctx.fontKerning = 'normal'; };
+// letter origins for a word set letter-by-letter with tracking (em); prefix widths keep kerning
+function wordGeom(ctx, word, w, size, track) {
+  setFont(ctx, w, size);
+  const xs = [], ws = [];
+  for (let i = 0; i < word.length; i++) {
+    xs.push(ctx.measureText(word.slice(0, i)).width + track * size * i);
+    ws.push(ctx.measureText(word[i]).width);
+  }
+  return { xs, ws, extent: xs[word.length - 1] + ws[word.length - 1] };
+}
+const G = {};   // static geometry, computed once after the font loads
+// ink bounds of a glyph measured from pixels (alpha >= 50%) -> exact hand-offs between glyphs and shapes
+function inkBox(ch, w, size) {
+  const c = document.createElement('canvas'); c.width = Math.ceil(size * 3); c.height = Math.ceil(size * 3);
+  const x = c.getContext('2d', { willReadFrequently: true });
+  setFont(x, w, size); x.fillStyle = '#fff'; x.fillText(ch, size, size * 2);
+  const d = x.getImageData(0, 0, c.width, c.height).data;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let y = 0; y < c.height; y++) for (let i = 0; i < c.width; i++) if (d[(y * c.width + i) * 4 + 3] >= 128) {
+    if (i < x0) x0 = i; if (i > x1) x1 = i; if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  return { left: x0 - size, right: x1 + 1 - size, top: y0 - size * 2, bottom: y1 + 1 - size * 2 };
+}
+
+// ───────────────────────────── shared drawing helpers ─────────────────────────────
+function fillBG(ctx, c) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = c; ctx.fillRect(0, 0, W, H); }
+// hand-inked line: slight wobble, boils at 12 fps
+function inkPath(ctx, x0, y0, x1, y1, seed, amp) {
+  const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
+  const n = Math.max(2, Math.min(7, Math.ceil(L / 55)));
+  ctx.moveTo(x0, y0);
+  for (let i = 1; i <= n; i++) {
+    const f = i / n, o = i < n ? amp * (hash(seed + i * 7.13) * 2 - 1) : 0;
+    ctx.lineTo(x0 + dx * f + nx * o, y0 + dy * f + ny * o);
+  }
+}
+// letters drawn one by one: [{ch,x,y,w,size,color, wipe:{color,k,dir}}]; y = baseline
+function drawLetters(ctx, letters) {
+  for (const L of letters) {
+    setFont(ctx, L.w, L.size);
+    ctx.fillStyle = L.color;
+    ctx.fillText(L.ch, L.x, L.y);
+    if (L.wipe && L.wipe.k > 0) {  // colour wipe: a hard edge travels through the glyph
+      const top = L.y - L.size * 0.75, bot = L.y + L.size * 0.05, h = bot - top;
+      ctx.save(); ctx.beginPath();
+      if (L.wipe.dir > 0) ctx.rect(L.x - L.size, bot - h * L.wipe.k, L.size * 3, h * L.wipe.k + 2);
+      else ctx.rect(L.x - L.size, top - 2, L.size * 3, h * L.wipe.k + 2);
+      ctx.clip(); ctx.fillStyle = L.wipe.color; ctx.fillText(L.ch, L.x, L.y); ctx.restore();
+    }
+  }
+}
+
+// ═════════════════════════════ SEGMENT: END TITLE + LOOP SEAM ═════════════════════════════
+// u = t - 15 for t in [13,15), u = t for t in [0,0.72): one continuous function across the loop point.
+function titleCam(u) {
+  const s = Math.exp(seamLog(u));
+  const k = u <= 0 ? 0 : smoother(warp(u / 0.5, 1.1));
+  return { s, ox: lerp(G.Pc[0], CX, k), oy: lerp(G.Pc[1], CY, k) };   // screen = O + s (w - Pc)
+}
+const tmap = (c, x, y) => [c.ox + c.s * (x - G.Pc[0]), c.oy + c.s * (y - G.Pc[1])];
+
+function drawTitleCard(ctx, u, c, opts) {
+  // fully formed title (letters, subtitle, period); opts.periodScale for the landing
+  ctx.setTransform(c.s, 0, 0, c.s, c.ox - c.s * G.Pc[0], c.oy - c.s * G.Pc[1]);
+  if (opts.title !== false) {
+    setFont(ctx, G.tWeight, G.tSize); ctx.fillStyle = opts.titleColor || COL.paper;
+    for (let i = 0; i < TITLE.length; i++) ctx.fillText(TITLE[i], G.tX0 + G.tGeom.xs[i], G.tBase);
+  }
+  if (opts.sub > 0) {
+    setFont(ctx, G.sWeight, G.sSize);
+    const n = SUBTITLE.length;
+    ctx.save(); ctx.beginPath(); ctx.rect(G.tX0 - 40, G.sBase - G.sSize * 1.0, 2000, G.sSize * 1.35); ctx.clip();
+    for (let i = 0; i < n; i++) {
+      const k = eo(opts.sub, i * 0.011, 0.26);
+      if (k <= 0) continue;
+      ctx.fillStyle = COL.cyan;
+      ctx.fillText(SUBTITLE[i], G.sX0 + G.sGeom.xs[i], G.sBase + G.sSize * 1.1 * (1 - k));
+    }
+    ctx.restore();
+  }
+  const ps = opts.periodScale ?? 1;
+  if (ps > 0) {
+    const r = G.Pr, cx = (r[0] + r[2]) / 2, cy = (r[1] + r[3]) / 2, hw = (r[2] - r[0]) / 2 * ps, hh = (r[3] - r[1]) / 2 * ps;
+    ctx.fillStyle = COL.paper; ctx.fillRect(cx - hw, cy - hh, hw * 2, hh * 2);
+  }
+}
+
+function drawSeam(ctx, u) {      // u in [0, 0.72): push through the period into the paper
+  const c = titleCam(u);
+  const r = G.Pr;
+  const [x0, y0] = tmap(c, r[0], r[1]), [x1, y1] = tmap(c, r[2], r[3]);
+  if (x0 <= 0 && y0 <= 0 && x1 >= W && y1 >= H) { drawSketch(ctx, u, true); return; }
+  fillBG(ctx, COL.black);
+  drawTitleCard(ctx, u, c, { sub: 1, periodScale: 0 });
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.save(); ctx.beginPath(); ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.clip();
+  drawSketch(ctx, u, true);
+  ctx.restore();
+}
+
+// spans: the hologram's scanlines at t = 13.0 travel into the title's scanlines
+function drawTitleEnd(ctx, t) {
+  const u = t - DUR;
+  const c = titleCam(u);
+  fillBG(ctx, COL.black);
+  if (t < 13.86) {
+    const fuse = eio(t, 13.5, 0.32);
+    const colK = eo(t, 13.52, 0.3);
+    const color = mix('cyan', 'paper', colK);
+    const pitch = G.spanPitch * c.s;
+    // spans are drawn on a layer, then clipped by the real glyph outlines (destination-in)
+    const L = layer;
+    L.setTransform(1, 0, 0, 1, 0, 0); L.globalCompositeOperation = 'source-over'; L.clearRect(0, 0, W, H);
+    L.fillStyle = color;
+    const pairs = G.spanPairs, src = G.srcSpans, dst = G.dstSpans;
+    if (t < 13.5) {
+      for (let i = 0; i < pairs.length; i++) {
+        const [si, di] = pairs[i], S = src[si], D = dst[di];
+        const ky = eo(t, 13.0 + D.delay * 0.5, 0.24), kx = eo(t, 13.1 + D.delay, 0.32);
+        const [dx0, dy] = tmap(c, D.x0, D.y), [dx1] = tmap(c, D.x1, D.y);
+        const y = lerp(S.y, dy, ky), xa = lerp(S.x0, dx0, kx), xb = lerp(S.x1, dx1, kx);
+        const th = lerp(S.th, 2, ky);
+        L.fillRect(xa, y - th / 2, Math.max(0.5, xb - xa), th);
+      }
+    } else {
+      const th = lerp(2, pitch + 2.5, fuse);
+      for (const D of dst) {
+        const [dx0, dy] = tmap(c, D.x0 - 3, D.y), [dx1] = tmap(c, D.x1 + 3, D.y);
+        L.fillRect(dx0, dy - th / 2, dx1 - dx0, th);
+      }
+    }
+    // once landed, the scanlines are trimmed by the real glyph outlines and fuse into solid letters
+    if (t >= 13.5) {
+      const M = maskCtx;
+      M.setTransform(1, 0, 0, 1, 0, 0); M.clearRect(0, 0, W, H);
+      M.setTransform(c.s, 0, 0, c.s, c.ox - c.s * G.Pc[0], c.oy - c.s * G.Pc[1]);
+      setFont(M, G.tWeight, G.tSize); M.fillStyle = '#fff';
+      for (let i = 0; i < TITLE.length; i++) M.fillText(TITLE[i], G.tX0 + G.tGeom.xs[i], G.tBase);
+      L.globalCompositeOperation = 'destination-in';
+      L.drawImage(maskCanvas, 0, 0);
+      L.globalCompositeOperation = 'source-over';
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(layerCanvas, 0, 0);
+  } else {
+    drawTitleCard(ctx, u, c, { title: true, sub: -1, periodScale: 0 });
+  }
+  // subtitle (B29) and the period landing (B30)
+  drawTitleCard(ctx, u, c, { title: false, sub: t - 14.0, periodScale: sp(t, 14.5, 2.4, 0.84) });
+}
+
+// ═════════════════════════════ SEGMENT: ARCHIVAL SKETCH (bar 1) ═════════════════════════════
+function sketchCamera(t, inSeam) {
+  // returns screen = (ox, oy) + k * q   for sketch-world q
+  if (inSeam) {
+    const c = titleCam(t);
+    return { k: c.s / TITLE_K, ox: c.ox, oy: c.oy };
+  }
+  const k = cam(t);
+  const f = smoother(ph(t, 1.58, 0.40));
+  const fx = G.qInk[0] * f, fy = G.qInk[1] * f;
+  return { k, ox: CX - k * fx, oy: CY - k * fy };
+}
+function sketchSolid(t) {
+  const yaw = (24 + 15 * t) * DEG + 68 * DEG * sp(t, 1.5, 1.6, 0.86);
+  const M = MM(RX(13 * DEG), MM(RY(yaw), RX(-31.7175 * DEG)));
+  const camS = { D: D0, F: F0, cx: 0, cy: 0 };
+  const P = ICO.V.map(v => MV(M, v));
+  return { P, S: P.map(p => project(p, camS)), camS };
+}
+function drawSketch(ctx, t, inSeam) {
+  const sc = sketchCamera(t, inSeam);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = COL.paper; ctx.fillRect(0, 0, W, H);
+  ctx.setTransform(sc.k, 0, 0, sc.k, sc.ox, sc.oy);
+  const boil = Math.floor(t * 12) * 0.37;
+  const R = ICO.R * 165 + 6;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+  // — construction (vermilion) —
+  ctx.strokeStyle = COL.verm; ctx.lineWidth = 1.4;
+  const cross = eo(t, 0.22, 0.34) * (R + 64);
+  if (cross > 0) {
+    ctx.beginPath();
+    ctx.moveTo(-cross, 0); ctx.lineTo(cross, 0); ctx.moveTo(0, -cross); ctx.lineTo(0, cross);
+    ctx.stroke();
+  }
+  const arc = eo(t, 0.5, 0.42);
+  if (arc > 0) {
+    ctx.beginPath(); ctx.arc(0, 0, R, -Math.PI / 2, -Math.PI / 2 + TAU * arc); ctx.stroke();
+    // compass pivot
+    ctx.beginPath(); ctx.arc(0, 0, 7, 0, TAU); ctx.stroke();
+  }
+  for (let i = 0; i < 4; i++) {
+    const a = [-30, 30, 150, 210][i] * DEG;
+    const k = eo(t, 0.55 + i * 0.045, 0.3);
+    if (k <= 0) continue;
+    const len = (R + 46) * k;
+    ctx.beginPath(); ctx.moveTo(Math.cos(a) * 18, Math.sin(a) * 18); ctx.lineTo(Math.cos(a) * len, Math.sin(a) * len); ctx.stroke();
+  }
+
+  // — the hollow solid in iron-gall ink —
+  const { P, S, camS } = sketchSolid(t);
+  const hw = 0.068;
+  const order = ICO.E.map((e, i) => i).sort((a, b) => (P[ICO.E[a][0]][2] + P[ICO.E[a][1]][2]) - (P[ICO.E[b][0]][2] + P[ICO.E[b][1]][2]));
+  // vertex marks (construction), riding the solid
+  for (let i = 0; i < 12; i++) {
+    const k = eo(t, 0.72 + G.vLevel[i] * 0.05, 0.2);
+    if (k <= 0) continue;
+    ctx.beginPath(); ctx.arc(S[i].x, S[i].y, 5.5 * k, 0, TAU); ctx.stroke();
+  }
+  // cord from the plate label to the top vertex
+  const cordK = eo(t, 1.0, 0.3);
+  if (cordK > 0) {
+    const top = S[G.topV];
+    ctx.strokeStyle = COL.sepia; ctx.lineWidth = 1.3;
+    ctx.beginPath(); inkPath(ctx, 0, -R - 62, lerp(0, top.x, cordK), lerp(-R - 62, top.y, cordK), 91 + boil, 0.6); ctx.stroke();
+  }
+  for (const ei_ of order) {
+    const [ia, ib] = G.edgeDir[ei_];
+    const t0 = 1.0 + G.eLevel[ei_] * 0.075;
+    const p = eo(t, t0, 0.24);
+    if (p <= 0) continue;
+    const a = S[ia], b = S[ib];
+    const bx = lerp(a.x, b.x, p), by = lerp(a.y, b.y, p);
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;
+    const wa = hw * camS.F / a.d, wb = hw * camS.F / lerp(a.d, b.d, p);
+    const ex = dx / len * wa * 0.6, ey = dy / len * wa * 0.6;   // let beams run into the joints
+    const q = [[a.x + nx * wa - ex, a.y + ny * wa - ey], [bx + nx * wb, by + ny * wb], [bx - nx * wb, by - ny * wb], [a.x - nx * wa - ex, a.y - ny * wa - ey]];
+    ctx.fillStyle = COL.paper;
+    ctx.beginPath(); ctx.moveTo(q[0][0], q[0][1]); for (let j = 1; j < 4; j++) ctx.lineTo(q[j][0], q[j][1]); ctx.closePath(); ctx.fill();
+    // hatching on beams turned away from the light (Leonardo's left-handed \\\ strokes)
+    const mid = v3.norm(v3.mul(v3.add(P[ia], P[ib]), 0.5));
+    const lit = v3.dot(mid, LIGHT_DIR);
+    const hk = eo(t, t0 + 0.12, 0.26);
+    if (lit < 0.25 && hk > 0) {
+      ctx.save(); ctx.beginPath(); ctx.moveTo(q[0][0], q[0][1]); for (let j = 1; j < 4; j++) ctx.lineTo(q[j][0], q[j][1]); ctx.closePath(); ctx.clip();
+      // sweep: only the first hk of the beam is hatched
+      const hx = a.x + dx * p * hk, hy = a.y + dy * p * hk;
+      ctx.beginPath(); ctx.rect(Math.min(a.x, hx) - 40, Math.min(a.y, hy) - 40, Math.abs(hx - a.x) + 80, Math.abs(hy - a.y) + 80); ctx.clip();
+      const gap = lit < -0.35 ? 3.4 : lit < 0 ? 4.6 : 6.4;
+      const cxm = (a.x + bx) / 2, cym = (a.y + by) / 2, span = len + 60;
+      ctx.strokeStyle = COL.sepia; ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      for (let s = -span; s <= span; s += gap) { ctx.moveTo(cxm + s - span, cym - span); ctx.lineTo(cxm + s + span, cym + span); }
+      if (lit < -0.35) for (let s = -span; s <= span; s += gap * 1.6) { ctx.moveTo(cxm + s + span, cym - span); ctx.lineTo(cxm + s - span, cym + span); }
+      ctx.stroke(); ctx.restore();
+    }
+    ctx.strokeStyle = COL.sepia; ctx.lineWidth = 1.7;
+    ctx.beginPath();
+    const sd = ei_ * 13.7 + boil;
+    inkPath(ctx, q[0][0], q[0][1], q[1][0], q[1][1], sd, 0.7);
+    inkPath(ctx, q[3][0], q[3][1], q[2][0], q[2][1], sd + 3.1, 0.7);
+    inkPath(ctx, q[0][0], q[0][1], q[3][0], q[3][1], sd + 5.3, 0.3);
+    if (p >= 1) inkPath(ctx, q[1][0], q[1][1], q[2][0], q[2][1], sd + 6.9, 0.3);
+    ctx.stroke();
+  }
+
+  // — captions (the plate label and the medium) —
+  drawCaption(ctx, G.capTop, t, 1.0, 1.9, -1);
+  drawCaption(ctx, G.capBot, t, 1.06, 1.62, 3);
+}
+// caption: per-letter type-on (mask slide) and, after tOut, every letter except the first `keep` drops out
+function drawCaption(ctx, cap, t, tIn, tOut, keep) {
+  setFont(ctx, cap.w, cap.size);
+  ctx.save(); ctx.beginPath(); ctx.rect(cap.x0 - 30, cap.base - cap.size * 1.05, cap.geom.extent + 60, cap.size * 1.4); ctx.clip();
+  for (let i = 0; i < cap.text.length; i++) {
+    const k = eo(t, tIn + i * (cap.text.length > 20 ? 0.006 : 0.012), 0.22);
+    if (k <= 0) continue;
+    let y = cap.base + cap.size * 1.1 * (1 - k);
+    if (keep >= 0 && i >= keep) y += cap.size * 1.2 * ei(t, tOut + (i - keep) * 0.01, 0.2);
+    ctx.fillStyle = cap.color;
+    ctx.fillText(cap.text[i], cap.x0 + cap.geom.xs[i], y);
+  }
+  ctx.restore();
+}
+
+// ═════════════════════════════ SEGMENT: KINETIC TYPE (bar 2) ═════════════════════════════
+// kinetic world: px, the INK block centred on the origin, cap-centre at y = 0.  screen = C + r (p - Gf)
+function kinCamera(t) {
+  const r = cam(t) / 17;
+  const f = smoother(ph(t, 3.58, 0.42));
+  return { r, fx: G.iCenter[0] * f, fy: G.iCenter[1] * f };
+}
+function kinLetters(t) {
+  const size = G.kSize, base = G.kCap / 2, band = G.kCap * 1.28;
+  const out = [];
+  const place = (word, w, track) => { const g = wordGeom(main, word, w, size, track); return g.xs.map(x => x - g.extent / 2); };
+  if (t < 2.5) {                                   // B5 INK lands and bleeds heavier
+    const w = lerp(500, 820, eo(t, 2.02, 0.42));
+    const track = lerp(0.2, 0.0, sp(t, 2.0, 2.2, 0.86));
+    const xs = place('INK', w, track);
+    for (let i = 0; i < 3; i++) out.push({ ch: 'INK'[i], x: xs[i], y: base, w, size, color: COL.sepia });
+  } else if (t < 3.0) {                            // B6 INK -> LINE
+    const w = lerp(820, 140, eo(t, 2.5, 0.36));
+    const kx = sp(t, 2.5, 2.6, 0.86);
+    const from = place('INK', 820, 0), to = place('LINE', w, 0.06);
+    const wipe = { color: COL.verm, k: eo(t, 2.52, 0.3), dir: 1 };
+    out.push({ ch: 'I', x: lerp(from[0], to[1], kx), y: base, w, size, color: COL.sepia, wipe });
+    out.push({ ch: 'N', x: lerp(from[1], to[2], kx), y: base, w, size, color: COL.sepia, wipe });
+    out.push({ ch: 'K', x: from[2], y: base + band * ei(t, 2.5, 0.2), w: 820, size, color: COL.sepia });
+    out.push({ ch: 'L', x: to[0], y: base + band * (1 - eo(t, 2.53, 0.32)), w, size, color: COL.verm });
+    out.push({ ch: 'E', x: to[3], y: base + band * (1 - eo(t, 2.57, 0.32)), w, size, color: COL.verm });
+  } else if (t < 3.5) {                            // B7 LINE -> LIGHT
+    const w = lerp(140, 900, eo(t, 3.0, 0.36));
+    const kx = sp(t, 3.0, 2.6, 0.86);
+    const from = place('LINE', 140, 0.06), to = place('LIGHT', w, -0.01);
+    const wipe = { color: COL.black, k: eo(t, 3.02, 0.3), dir: -1 };
+    out.push({ ch: 'L', x: lerp(from[0], to[0], kx), y: base, w, size, color: COL.verm, wipe });
+    out.push({ ch: 'I', x: lerp(from[1], to[1], kx), y: base, w, size, color: COL.verm, wipe });
+    out.push({ ch: 'N', x: from[2], y: base - band * ei(t, 3.0, 0.2), w: 140, size, color: COL.verm });
+    out.push({ ch: 'E', x: from[3], y: base - band * ei(t, 3.02, 0.2), w: 140, size, color: COL.verm });
+    out.push({ ch: 'G', x: to[2], y: base - band * (1 - eo(t, 3.03, 0.32)), w, size, color: COL.black });
+    out.push({ ch: 'H', x: to[3], y: base - band * (1 - eo(t, 3.06, 0.32)), w, size, color: COL.black });
+    out.push({ ch: 'T', x: to[4], y: base - band * (1 - eo(t, 3.09, 0.32)), w, size, color: COL.black });
+  } else {                                         // B8 LIGHT scatters; only the I stays
+    const xs = G.lightX;
+    const go = (i, sgn, d) => sgn * 1500 * ei(t, 3.54 + d, 0.34);
+    out.push({ ch: 'L', x: xs[0] + go(0, -1, 0.0), y: base, w: 900, size, color: COL.black });
+    out.push({ ch: 'I', x: xs[1], y: base, w: 900, size, color: COL.black });
+    out.push({ ch: 'G', x: xs[2] + go(2, 1, 0.05), y: base, w: 900, size, color: COL.black });
+    out.push({ ch: 'H', x: xs[3] + go(3, 1, 0.025), y: base, w: 900, size, color: COL.black });
+    out.push({ ch: 'T', x: xs[4] + go(4, 1, 0.0), y: base, w: 900, size, color: COL.black });
+  }
+  return out;
+}
+function drawKinetic(ctx, t) {
+  fillBG(ctx, COL.paper);
+  const c = kinCamera(t);
+  ctx.setTransform(c.r, 0, 0, c.r, CX - c.r * c.fx, CY - c.r * c.fy);
+  const letters = kinLetters(t);
+  ctx.save();
+  if (t >= 2.5 && t < 3.5) { ctx.beginPath(); ctx.rect(-4000, -G.kCap * 0.5 - G.kSize * 0.14, 8000, G.kCap + G.kSize * 0.28); ctx.clip(); }
+  drawLetters(ctx, letters);
+  ctx.restore();
+}
+
+// ═════════════════════════════ SEGMENT: SHAPE MORPH (bar 3) ═════════════════════════════
+const NRAY = 720;
+function polyRays(verts) {   // radial samples of a convex polygon around the origin
+  const out = new Float64Array(NRAY);
+  for (let k = 0; k < NRAY; k++) {
+    const a = -Math.PI / 2 + k * TAU / NRAY, dx = Math.cos(a), dy = Math.sin(a);
+    let best = Infinity;
+    for (let i = 0; i < verts.length; i++) {
+      const [x1, y1] = verts[i], [x2, y2] = verts[(i + 1) % verts.length];
+      const ex = x2 - x1, ey = y2 - y1, den = dx * ey - dy * ex;
+      if (Math.abs(den) < 1e-9) continue;
+      const s = (x1 * ey - y1 * ex) / den, u = (x1 * dy - y1 * dx) / den;
+      if (s > 0 && u >= -1e-9 && u <= 1 + 1e-9) best = Math.min(best, s);
+    }
+    out[k] = best;
+  }
+  return out;
+}
+const ngon = (n, R, rot = -90) => Array.from({ length: n }, (_, i) => [R * Math.cos((rot + i * 360 / n) * DEG), R * Math.sin((rot + i * 360 / n) * DEG)]);
+function morphCamScale(t) { return cam(t) / cam(4.0); }
+function morphShape(t) {
+  // returns array of points (morph world) and current stage index
+  const S = G.shapes;
+  const stages = [[4.0, 0, 1, 0], [4.5, 1, 2, 120], [5.0, 2, 3, -72], [5.5, 3, 4, 180]];
+  let st = stages[0];
+  for (const s of stages) if (t >= s[0]) st = s;
+  const [t0, a, b, rot] = st;
+  const e = b === 4 ? eo(t, t0, 0.21) : sp(t, t0, 2.5, 0.84);
+  const shift = Math.round(rot / 360 * NRAY);
+  const A = S[a], B = S[b];
+  const pts = new Array(NRAY);
+  const ang = rot * DEG * e;
+  for (let k = 0; k < NRAY; k++) {
+    const kb = ((k + shift) % NRAY + NRAY) % NRAY;      // B rotated back by rot, then the whole spins forward
+    const th = -Math.PI / 2 + k * TAU / NRAY;
+    const ra = A[k], rb = B[kb];
+    const r = lerp(ra, rb, e);
+    pts[k] = [r * Math.cos(th + ang), r * Math.sin(th + ang)];
+  }
+  return pts;
+}
+function drawMorph(ctx, t) {
+  fillBG(ctx, COL.paper);
+  const s = morphCamScale(t);
+  ctx.setTransform(s, 0, 0, s, CX, CY);
+  const pts = morphShape(t);
+  const [hx, hy] = G.goldHalf;
+  const flood = ph(t, 5.72, 0.28);
+  if (flood <= 0) {
+    ctx.fillStyle = COL.black;
+    ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (let k = 1; k < NRAY; k++) ctx.lineTo(pts[k][0], pts[k][1]); ctx.closePath(); ctx.fill();
+  }
+  drawAnnotations(ctx, t);
+  if (flood > 0) {
+    // figure/ground flip: the ink floods outward, leaving the rectangle as a paper line
+    const g = 1.5 / s, f = 1 + 6.5 * expoIn(flood) + 0.02 * flood;
+    ctx.fillStyle = COL.black;
+    ctx.fillRect(-hx + g, -hy + g, 2 * (hx - g), 2 * (hy - g));
+    ctx.beginPath();
+    ctx.rect(-hx * f - g, -hy * f - g, 2 * (hx * f + g), 2 * (hy * f + g));
+    ctx.rect(hx + g, -hy - g, -2 * (hx + g), 2 * (hy + g));   // reversed winding = hole
+    ctx.fill('evenodd');
+  }
+}
+function drawAnnotations(ctx, t) {
+  ctx.strokeStyle = COL.verm; ctx.fillStyle = COL.verm; ctx.lineWidth = 2; ctx.lineCap = 'butt';
+  const lab = (txt, x, y, k, align = 'center') => {
+    if (k <= 0) return;
+    setFont(ctx, 500, 28); ctx.textAlign = align;
+    ctx.save(); ctx.beginPath(); ctx.rect(x - 120, y - 30, 240, 38); ctx.clip();
+    ctx.fillText(txt, x, y + 34 * (1 - k)); ctx.restore(); ctx.textAlign = 'left';
+  };
+  // circle: radius
+  {
+    const k = eo(t, 4.14, 0.2), off = ei(t, 4.5, 0.1), r = G.circleR;
+    if (k > off) {
+      ctx.beginPath(); ctx.moveTo(r * off, 0); ctx.lineTo(r * k, 0); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, 5, 0, TAU); ctx.fill();
+      if (off <= 0) lab('r', r * 0.5, -14, eo(t, 4.2, 0.2));
+    }
+  }
+  // triangle: 60 degrees at the lower-left corner
+  {
+    const k = eo(t, 4.64, 0.22), off = ei(t, 5.0, 0.1);
+    if (k > off) {
+      const [vx, vy] = G.triV[2];   // lower-left
+      const a0 = -60 * DEG, a1 = 0;
+      ctx.beginPath(); ctx.arc(vx, vy, 64, lerp(a0, a1, off), lerp(a0, a1, k)); ctx.stroke();
+      if (off <= 0) lab('60°', vx + 112, vy - 22, eo(t, 4.7, 0.2));
+    }
+  }
+  // pentagon: 108 degrees at the top
+  {
+    const k = eo(t, 5.14, 0.22), off = ei(t, 5.5, 0.1);
+    if (k > off) {
+      const [vx, vy] = G.pentV[0];
+      const a0 = 54 * DEG, a1 = 162 * DEG;
+      ctx.beginPath(); ctx.arc(vx, vy, 58, lerp(a0, a1, off), lerp(a0, a1, k)); ctx.stroke();
+      if (off <= 0) lab('108°', vx, vy + 112, eo(t, 5.2, 0.2));
+    }
+  }
+  // golden rectangle: 1 : 1.618 dimension lines
+  {
+    const k = eo(t, 5.62, 0.22);
+    if (k > 0) {
+      const [hx, hy] = G.goldHalf, y = -hy - 40, x = hx + 40;
+      ctx.beginPath();
+      ctx.moveTo(-hx * k, y); ctx.lineTo(hx * k, y);
+      ctx.moveTo(-hx, y - 10); ctx.lineTo(-hx, y + 10); ctx.moveTo(hx, y - 10); ctx.lineTo(hx, y + 10);
+      ctx.moveTo(x, -hy * k); ctx.lineTo(x, hy * k);
+      ctx.moveTo(x - 10, -hy); ctx.lineTo(x + 10, -hy); ctx.moveTo(x - 10, hy); ctx.lineTo(x + 10, hy);
+      ctx.stroke();
+      lab('1.618', 0, y - 18, eo(t, 5.66, 0.2));
+      lab('1', x + 30, 10, eo(t, 5.68, 0.2), 'left');
+    }
+  }
+}
+
+// ═════════════════════════════ SEGMENT: OBJECT — 2D->3D, DATA, LIGHT, IMPACT (bars 4-7) ═════════════════════════════
+function objState(t) {
+  const F = F0 * cam(Math.min(t, 13)) / cam(6.0);
+  const fly = Math.pow(ph(t, 12.5, 0.5), 2.2);   // B26: rush into the shattering shell
+  const D = D0 - 3.9 * fly;
+  const offX = 380 * sp(t, 8.0, 2.0, 0.86) * (1 - sp(t, 10.0, 2.2, 0.86));
+  const lift = 0.22 * sp(t, 10.5, 2.0, 0.86);
+  const camO = { D, F, cx: CX + offX, cy: CY };
+  const tilt = -20 * DEG * sp(t, 6.0, 1.9, 0.84);
+  const yaw = 36 * DEG * sp(t, 6.0, 1.7, 0.84) + 21 * DEG * Math.max(0, t - 6.0)
+            + 90 * DEG * eio(t, 11.0, 0.3) + 50 * DEG * eo(t, 12.0, 0.8);
+  const M = MM(RX(tilt), RY(yaw));
+  const T = RX(tilt);
+  // local poses of rectangles B and C (they swing out of A's plane)
+  const rB = RY(90 * DEG * (1 - sp(t, 6.5, 2.3, 0.84)));
+  const rC = RX(-90 * DEG * (1 - sp(t, 7.0, 2.3, 0.84)));
+  const model = ICO.V.map((v, i) => i >= 8 ? MV(rC, v) : i >= 4 ? MV(rB, v) : v);
+  const P = model.map(v => { const p = MV(M, v); p[1] += lift; return p; });
+  const S = P.map(p => project(p, camO));
+  return { t, camO, M, T, P, S, lift, D, F, offX };
+}
+
+function edgeWidth(st, i, j, base) {
+  const d = (st.S[i].d + st.S[j].d) / 2;
+  return base * Math.pow(st.D / d, 1.4);
+}
+function drawObject(ctx, t) {
+  fillBG(ctx, COL.black);
+  const st = objState(t);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.lineCap = 'round';
+
+  if (t < 10.0) drawWire(ctx, st, t);
+  else if (t < 10.5) {
+    const sc = scanLines(t);
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, sc.up); ctx.rect(0, sc.down, W, H - sc.down); ctx.clip(); drawWire(ctx, st, t); ctx.restore();
+    ctx.save(); ctx.beginPath(); ctx.rect(0, sc.up, W, sc.down - sc.up); ctx.clip(); drawHolo(ctx, st, t); ctx.restore();
+  } else drawHolo(ctx, st, t);
+
+  if (t >= 8.0 && t < 10.5) drawData(ctx, st, t);
+  if (t >= 10.0 && t < 10.5) {
+    const sc = scanLines(t);
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = COL.cyan;
+    ctx.fillRect(sc.x0, sc.up - 1, sc.x1 - sc.x0, 2);
+    ctx.fillRect(sc.x0, sc.down - 1, sc.x1 - sc.x0, 2);
+  }
+}
+// the equation's baseline becomes two scan lines: they stretch to the frame edges and split up/down
+function scanLines(t) {
+  const s = cam(t) / cam(8.0);
+  const eqY = CY + s * G.eqMidY;
+  const k = eio(t, 10.06, 0.4), kx = eo(t, 10.0, 0.18);
+  const xc = CX + s * (G.eqX0 + G.eqX1) / 2;
+  return { up: lerp(eqY, -4, k), down: lerp(eqY, H + 4, k), x0: lerp(xc, 0, kx), x1: lerp(xc, W, kx) };
+}
+
+function drawWire(ctx, st, t) {
+  const { S } = st;
+  // golden rectangles
+  const show = [1, eo(t, 6.5, 0.26), eo(t, 7.0, 0.26)];
+  const retract = eio(t, 7.82, 0.3);
+  for (let r = 0; r < 3; r++) {
+    if (show[r] <= 0) continue;
+    const loop = RECTS[r];
+    // perimeter draw-on: sides in order (short, long, short, long)
+    for (let s = 0; s < 4; s++) {
+      const i = loop[s], j = loop[(s + 1) % 4];
+      const isLong = Math.abs(v3.len(v3.sub(ICO.V[i], ICO.V[j])) - 2) > 0.1;
+      const k = clamp(show[r] * 4 - s);
+      if (k <= 0) continue;
+      let a0 = 0, a1 = k;
+      if (isLong) { a0 = retract * 0.5; a1 = Math.min(k, 1 - retract * 0.5); if (a1 <= a0) continue; }
+      const w = edgeWidth(st, i, j, 3);
+      ctx.strokeStyle = isLong && retract > 0 ? COL.verm : COL.paper;
+      ctx.lineWidth = isLong ? Math.max(1, w * (1 - 0.5 * retract)) : w;
+      ctx.beginPath();
+      ctx.moveTo(lerp(S[i].x, S[j].x, a0), lerp(S[i].y, S[j].y, a0));
+      ctx.lineTo(lerp(S[i].x, S[j].x, a1), lerp(S[i].y, S[j].y, a1));
+      ctx.stroke();
+    }
+  }
+  // icosahedron edges fire between the corners
+  ICO.E.forEach(([i, j], n) => {
+    const k = eo(t, 7.5 + G.edgeOrder[n] * 0.0085, 0.2);
+    if (k <= 0) return;
+    // highlight pulse while counting edges (B18)
+    ctx.strokeStyle = COL.paper; ctx.lineWidth = edgeWidth(st, i, j, 2.4);
+    ctx.beginPath();
+    ctx.moveTo(S[i].x, S[i].y);
+    ctx.lineTo(lerp(S[i].x, S[j].x, k), lerp(S[i].y, S[j].y, k));
+    ctx.stroke();
+    const pt = 8.5 + G.edgeOrder[n] * 0.0095;
+    const pk = ph(t, pt, 0.16);
+    if (pk > 0 && pk < 1) {
+      const a = expoOut(pk), b = Math.max(0, a - 0.45);
+      ctx.strokeStyle = COL.verm; ctx.lineWidth = edgeWidth(st, i, j, 3.4);
+      ctx.beginPath(); ctx.moveTo(lerp(S[i].x, S[j].x, b), lerp(S[i].y, S[j].y, b)); ctx.lineTo(lerp(S[i].x, S[j].x, a), lerp(S[i].y, S[j].y, a)); ctx.stroke();
+    }
+  });
+  // vertex markers (12 corners), re-counted at B17
+  for (let i = 0; i < 12; i++) {
+    const k = eo(t, 7.18 + G.vOrder[i] * 0.02, 0.18);
+    if (k <= 0) continue;
+    const pop = ph(t, 8.0 + G.vOrder[i] * 0.022, 0.12);
+    const sz = 9 * k * (1 + 0.6 * (pop > 0 && pop < 1 ? 1 - pop : 0));
+    ctx.fillStyle = COL.verm;
+    ctx.fillRect(S[i].x - sz / 2, S[i].y - sz / 2, sz, sz);
+  }
+  // face insets while counting faces (B19-B20)
+  const fin = t >= 9.0;
+  if (fin) {
+    ICO.F.forEach((f, n) => {
+      const k = eo(t, 9.0 + G.fOrder[n] * 0.014, 0.2) * (1 - ei(t, 9.7, 0.2));
+      if (k <= 0) return;
+      const c = [0, 1, 2].map(q => S[f[q]]);
+      if ((c[1].x - c[0].x) * (c[2].y - c[0].y) - (c[1].y - c[0].y) * (c[2].x - c[0].x) > 0) return;   // back face
+      const mx = (c[0].x + c[1].x + c[2].x) / 3, my = (c[0].y + c[1].y + c[2].y) / 3;
+      const sc = 0.55 * k;
+      ctx.strokeStyle = COL.verm; ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      c.forEach((p, q) => { const x = mx + (p.x - mx) * sc, y = my + (p.y - my) * sc; q ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      ctx.closePath(); ctx.stroke();
+    });
+  }
+}
+
+// ── data / UI (bar 5) ──
+function drawData(ctx, st, t) {
+  const s = cam(t) / cam(8.0);
+  ctx.setTransform(s, 0, 0, s, CX, CY);
+  const out = eio(t, 10.0, 0.14);
+  const X0 = -690, X1 = -250;
+  // viewport brackets around the object
+  const bk = eo(t, 8.02, 0.3) * (1 - out);
+  if (bk > 0) {
+    const ox = st.offX / s, bw = 330 + 260 * (1 - bk), bh = 330 + 200 * (1 - bk), L = 34;
+    ctx.strokeStyle = COL.paper; ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      const x = ox + sx * bw, y = sy * bh;
+      ctx.moveTo(x, y + -sy * L); ctx.lineTo(x, y); ctx.lineTo(x - sx * L, y);
+    }
+    ctx.stroke();
+  }
+  ctx.save(); ctx.beginPath(); ctx.rect(X0 - 40, -420, 640, 840); ctx.clip();
+  const squash = eio(t, 10.0, 0.09);
+  if (squash > 0) { ctx.translate(0, G.eqMidY); ctx.scale(1, Math.max(0.001, 1 - squash)); ctx.translate(0, -G.eqMidY); }
+  // header
+  const hk = eo(t, 8.0, 0.3) * (1 - out);
+  if (hk > 0) {
+    setFont(ctx, 600, 22); ctx.fillStyle = COL.paper; ctx.letterSpacing = '5px';
+    ctx.fillText('ICOSAHEDRON  {3,5}', X0, -262 + 30 * (1 - hk));
+    ctx.letterSpacing = '0px';
+    ctx.fillStyle = COL.verm; ctx.fillRect(X0, -240, (X1 - X0) * hk, 2);
+  }
+  const rows = [['VERTICES', 12, 8.0, -130], ['EDGES', 30, 8.5, -10], ['FACES', 20, 9.0, 110]];
+  const eq = eo(t, 9.5, 0.3);
+  for (const [label, n, t0, y] of rows) {
+    const k = eo(t, t0, 0.32);
+    if (k <= 0) continue;
+    const cnt = Math.round(n * eo(t, t0 + 0.02, 0.34));
+    const leave = eio(t, 9.5, 0.3);
+    // label slides out as its number travels into the equation
+    setFont(ctx, 500, 22); ctx.letterSpacing = '5px'; ctx.fillStyle = COL.paper;
+    ctx.fillText(label, X0 - 400 * leave, y + 40 * (1 - k) - 6);
+    ctx.letterSpacing = '0px';
+    const rw = (X1 - X0) * k * (1 - leave);
+    if (rw > 2) { ctx.fillStyle = COL.paper; ctx.fillRect(X0, y + 28, rw, 1.5); }
+    // the number: from its row (right aligned) to its place in the equation
+    const sz = lerp(110, 64, eq);
+    setFont(ctx, 300, sz);
+    const str = String(cnt).padStart(2, '0');
+    const wNum = ctx.measureText(str).width;
+    const eqPos = G.eqPos[label];
+    const x = lerp(X1 - wNum, X0 + eqPos, eq), yy = lerp(y + 4, 250, eq);
+    ctx.fillStyle = COL.paper;
+    ctx.fillText(str, x, yy + 70 * (1 - k) * (1 - eq));
+  }
+  // operators of Euler's formula
+  if (eq > 0) {
+    setFont(ctx, 300, 64);
+    for (const [op, xx, d, col] of G.eqOps) {
+      const k = eo(t, 9.5 + d * 0.4, 0.22) * (1 - out);
+      if (k <= 0) continue;
+      ctx.fillStyle = col;
+      ctx.fillText(op, X0 + xx, 250 + 64 * (1 - k));
+    }
+    // V - E + F label
+    const lk = eo(t, 9.54, 0.24) * (1 - out);
+    if (lk > 0) {
+      setFont(ctx, 500, 20); ctx.letterSpacing = '5px'; ctx.fillStyle = COL.verm;
+      ctx.fillText('EULER  V − E + F', X0, 160 + 30 * (1 - lk)); ctx.letterSpacing = '0px';
+    }
+  }
+  ctx.restore();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+// ── hologram ──
+function holoFaces(st, t) {
+  // returns faces with view-space verts (exploded), normal, front flag
+  const ex = 2.5 * eo(t, 12.0, 0.62);
+  const out = [];
+  ICO.F.forEach((f, n) => {
+    let V = f.map(i => st.P[i].slice());
+    let c = v3.mul(v3.add(v3.add(V[0], V[1]), V[2]), 1 / 3);
+    let nrm = v3.norm(v3.cross(v3.sub(V[1], V[0]), v3.sub(V[2], V[0])));
+    if (ex > 0) {
+      const spin = (hash(n * 3.3) - 0.5) * 140 * DEG * eo(t, 12.0, 0.62);
+      const radial = v3.norm(v3.sub(c, [0, st.lift, 0]));
+      V = V.map(v => v3.add(rotAxis(v3.sub(v, c), nrm, spin), v3.add(c, v3.mul(radial, ex * (0.85 + 0.3 * hash(n * 7.1))))));
+      c = v3.mul(v3.add(v3.add(V[0], V[1]), V[2]), 1 / 3);
+    }
+    const toEye = v3.sub([0, 0, st.D], c);
+    out.push({ V, c, n: nrm, front: v3.dot(nrm, toEye) > 0, lit: Math.max(0, v3.dot(nrm, LIGHT_DIR)), idx: n });
+  });
+  return out;
+}
+function clipNear(V, D, near) {   // Sutherland-Hodgman against the plane z = D - near
+  const zc = D - near, out = [];
+  for (let i = 0; i < V.length; i++) {
+    const a = V[i], b = V[(i + 1) % V.length];
+    const ina = a[2] <= zc, inb = b[2] <= zc;
+    if (ina) out.push(a);
+    if (ina !== inb) { const k = (zc - a[2]) / (b[2] - a[2]); out.push([lerp(a[0], b[0], k), lerp(a[1], b[1], k), zc]); }
+  }
+  return out;
+}
+const holoPitch = t => t < 11.0 ? 7 : 5;
+// scanline spans of a screen polygon on the fixed row grid
+function polySpans(pts, pitch, phase, th, outArr) {
+  let y0 = Infinity, y1 = -Infinity;
+  for (const p of pts) { y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
+  y0 = Math.max(y0, -400); y1 = Math.min(y1, H + 400);
+  for (let y = Math.ceil((y0 - phase) / pitch) * pitch + phase; y <= y1; y += pitch) {
+    let xa = Infinity, xb = -Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      if ((a[1] <= y && b[1] > y) || (b[1] <= y && a[1] > y)) {
+        const x = a[0] + (y - a[1]) / (b[1] - a[1]) * (b[0] - a[0]);
+        xa = Math.min(xa, x); xb = Math.max(xb, x);
+      }
+    }
+    if (xb > xa) {
+      xa = Math.max(xa, -200); xb = Math.min(xb, W + 200);
+      if (xb > xa) outArr.push({ y, x0: xa, x1: xb, th });
+    }
+  }
+}
+function holoSpans(st, t) {
+  const faces = holoFaces(st, t);
+  const pitch = holoPitch(t);
+  const spans = [];
+  for (const f of faces) {
+    const V = clipNear(f.V, st.D, 0.14);
+    if (V.length < 3) continue;
+    const pts = V.map(v => { const p = project(v, st.camO); return [p.x, p.y]; });
+    if (f.front) polySpans(pts, pitch, 0.5, 0.9 + 1.5 * f.lit, spans);
+    else polySpans(pts, pitch, 0.5 + Math.floor(pitch / 2), 0.7, spans);
+  }
+  return { spans, faces };
+}
+function drawHolo(ctx, st, t) {
+  const { spans, faces } = holoSpans(st, t);
+  ctx.fillStyle = COL.cyan;
+  for (const s of spans) ctx.fillRect(s.x0, s.y - s.th / 2, s.x1 - s.x0, s.th);
+  // edges (dissolve at the impact)
+  ctx.strokeStyle = COL.cyan; ctx.lineJoin = 'round';
+  if (t < 12.0) {
+    ICO.E.forEach(([i, j]) => {
+      const front = (st.P[i][2] + st.P[j][2]) / 2 > 0;
+      ctx.lineWidth = (front ? 2.2 : 1.1) * Math.pow(st.D / ((st.S[i].d + st.S[j].d) / 2), 1.4);
+      ctx.beginPath(); ctx.moveTo(st.S[i].x, st.S[i].y); ctx.lineTo(st.S[j].x, st.S[j].y); ctx.stroke();
+    });
+  } else {
+    const thin = 1 - eio(t, 12.0, 0.36);
+    if (thin > 0) for (const f of faces) {
+      const V = clipNear(f.V, st.D, 0.14);
+      if (V.length < 3) continue;
+      ctx.lineWidth = (f.front ? 2.2 : 1.1) * thin;
+      ctx.beginPath();
+      V.forEach((v, q) => { const p = project(v, st.camO); q ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
+      ctx.closePath(); ctx.stroke();
+    }
+  }
+  drawRings(ctx, st, t);
+}
+function ringPts(st, r, y, n, a0, spin) {
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const a = a0 + i * TAU / n;
+    const v = MV(spin, [Math.cos(a) * r, 0, Math.sin(a) * r]);
+    const p = MV(st.T, [v[0], v[1] + y, v[2]]);
+    if (st.D - p[2] < 0.2) return null;
+    pts.push(project(p, st.camO));
+  }
+  return pts;
+}
+function strokePts(ctx, pts, k = 1) {
+  if (!pts) return;
+  const n = Math.max(1, Math.round((pts.length - 1) * k));
+  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i <= n; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.stroke();
+}
+function drawRings(ctx, st, t) {
+  const blast = 1 + 3.2 * ei(t, 12.0, 0.34);
+  if (t >= 12.34) return;
+  ctx.strokeStyle = COL.cyan; ctx.fillStyle = COL.cyan;
+  const I = [[1, 0, 0], [0, 1, 0], [0, 0, 1]].flat();
+  // projector base (B22)
+  [1.5, 1.95, 2.4].forEach((r, i) => {
+    const k = sp(t, 10.5 + i * 0.05, 2.4, 0.86);
+    if (k <= 0.001) return;
+    ctx.lineWidth = i === 2 ? 2 : 1.4;
+    strokePts(ctx, ringPts(st, r * k * blast, -2.15, 96, 0, I));
+  });
+  const tk = eo(t, 10.62, 0.3);
+  if (tk > 0) {   // tick marks rotating in the base plane
+    ctx.lineWidth = 1.4; ctx.beginPath();
+    for (let i = 0; i < 60; i++) {
+      const a = i * TAU / 60 + t * 0.35;
+      const p0 = MV(st.T, [Math.cos(a) * 2.4 * blast, -2.15, Math.sin(a) * 2.4 * blast]);
+      const p1 = MV(st.T, [Math.cos(a) * (2.4 + 0.16 * tk) * blast, -2.15, Math.sin(a) * (2.4 + 0.16 * tk) * blast]);
+      const A = project(p0, st.camO), B = project(p1, st.camO);
+      ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y);
+    }
+    ctx.stroke();
+  }
+  // orbit ring carrying the data (B24)
+  const ok = eo(t, 11.5, 0.38);
+  if (ok > 0) {
+    const spin = RY(t * 0.9);
+    ctx.lineWidth = 1.6;
+    const pts = ringPts(st, 2.85 * blast, st.lift, 128, 0, spin);
+    strokePts(ctx, pts, ok);
+    if (pts) {
+      setFont(ctx, 600, 20); ctx.letterSpacing = '3px';
+      ['V 12', 'E 30', 'F 20', '1 : 1.618'].forEach((txt, i) => {
+        const k = eo(t, 11.56 + i * 0.05, 0.22);
+        if (k <= 0 || t >= 12.0) return;
+        const p = pts[i * 32];
+        ctx.fillRect(p.x - 4, p.y - 4, 8, 8);
+        ctx.fillText(txt, p.x + 14, p.y - 12 + 20 * (1 - k));
+      });
+      ctx.letterSpacing = '0px';
+    }
+  }
+}
+
+// ═════════════════════════════ dispatcher ═════════════════════════════
+function renderFrame(ctx, t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  if (t < SEAM) drawSeam(ctx, t);
+  else if (t < 2.0) drawSketch(ctx, t, false);
+  else if (t < 4.0) drawKinetic(ctx, t);
+  else if (t < 6.0) drawMorph(ctx, t);
+  else if (t < 13.0) drawObject(ctx, t);
+  else drawTitleEnd(ctx, t);
+  if (window.DEBUG) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    setFont(ctx, 600, 26); ctx.fillStyle = '#ff00ff';
+    ctx.fillText(`t=${t.toFixed(3)}  beat ${Math.floor(t / BEAT) + 1}`, 24, 1056);
+  }
+}
+
+// ═════════════════════════════ motion probes (for speed-driven blur) ═════════════════════════════
+function probes(t) {
+  const pts = [];
+  if (t < SEAM || t >= 13.0) {
+    const u = t >= 13 ? t - DUR : t, c = titleCam(u);
+    for (const [x, y] of G.titleProbe) pts.push(tmap(c, x, y));
+    if (t < SEAM) { const sc = sketchCamera(t, true); for (const [x, y] of [[0, 0], [300, 0], [0, 300]]) pts.push([sc.ox + sc.k * x, sc.oy + sc.k * y]); }
+    else for (let i = 0; i < 3; i++) pts.push([0, 0]);
+    if (t >= 13.0 && t < 13.55) {
+      const c2 = titleCam(t - DUR);
+      for (let i = 0; i < G.spanPairs.length; i += 9) {
+        const [si, di] = G.spanPairs[i], S = G.srcSpans[si], D = G.dstSpans[di];
+        const ky = eo(t, 13.0 + D.delay * 0.5, 0.24), kx = eo(t, 13.1 + D.delay, 0.32);
+        const [dx0, dy] = tmap(c2, D.x0, D.y);
+        pts.push([lerp(S.x0, dx0, kx), lerp(S.y, dy, ky)]);
+      }
+    }
+  } else if (t < 2.0) {
+    const sc = sketchCamera(t, false), { S } = sketchSolid(t);
+    for (const p of S) pts.push([sc.ox + sc.k * p.x, sc.oy + sc.k * p.y]);
+    for (const [x, y] of [[0, 430], [-300, 430], [300, 430], [0, -420]]) pts.push([sc.ox + sc.k * x, sc.oy + sc.k * y]);
+  } else if (t < 4.0) {
+    const c = kinCamera(t);
+    for (const L of kinLetters(t)) pts.push([CX + c.r * (L.x - c.fx), CY + c.r * (L.y - c.fy)], [CX + c.r * (L.x + 200 - c.fx), CY + c.r * (L.y - G.kCap - c.fy)]);
+  } else if (t < 6.0) {
+    const s = morphCamScale(t), sh = morphShape(t);
+    for (let k = 0; k < NRAY; k += 30) pts.push([CX + s * sh[k][0], CY + s * sh[k][1]]);
+    const f = ph(t, 5.72, 0.28);
+    if (f > 0) { const g = 1 + 6.5 * expoIn(f); pts.push([CX + s * G.goldHalf[0] * g, CY + s * G.goldHalf[1] * g]); } else pts.push([CX, CY]);
+  } else if (t < 13.0) {
+    const st = objState(t);
+    for (const p of st.S) pts.push([p.x, p.y]);
+    if (t >= 12.0) for (const f of holoFaces(st, t)) { if (st.D - f.c[2] > 0.3) { const p = project(f.c, st.camO); pts.push([p.x, p.y]); } else pts.push([0, 0]); }
+    else for (let i = 0; i < 20; i++) pts.push([0, 0]);
+  }
+  return pts;
+}
+function sampleCount(t) {
+  const a = probes(wrapT(t - SHUTTER / 2)), b = probes(wrapT(t + SHUTTER / 2));
+  if (a.length !== b.length) return 10;
+  let m = 0;
+  const on = (x, y) => x > -150 && x < W + 150 && y > -150 && y < H + 150;
+  for (let i = 0; i < a.length; i++) {
+    if (!on(a[i][0], a[i][1]) && !on(b[i][0], b[i][1])) continue;
+    const d = Math.hypot(b[i][0] - a[i][0], b[i][1] - a[i][1]);
+    if (isFinite(d)) m = Math.max(m, d);
+  }
+  return Math.min(28, Math.max(1, Math.ceil(m / 2.2)));
+}
+
+// ═════════════════════════════ seek ═════════════════════════════
+window.seek = function (T, shutter = true) {
+  const t = wrapT(T);
+  const n = shutter ? sampleCount(t) : 1;
+  if (n <= 1) { renderFrame(main, t); return 1; }
+  // motion blur that follows speed and direction: average n renders across the shutter interval
+  if (!SUM) SUM = new Uint32Array(W * H * 4);
+  SUM.fill(0);
+  for (let i = 0; i < n; i++) {
+    const ts = wrapT(t + SHUTTER * ((i + 0.5) / n - 0.5));
+    renderFrame(acc, ts);
+    const d = acc.getImageData(0, 0, W, H).data;
+    for (let j = 0; j < d.length; j++) SUM[j] += d[j];
+  }
+  const img = main.createImageData(W, H), o = img.data, half = n >> 1;
+  for (let j = 0; j < o.length; j++) o[j] = (SUM[j] + half) / n;
+  main.putImageData(img, 0, 0);
+  return n;
+};
+
+// ═════════════════════════════ static geometry (computed once) ═════════════════════════════
+function initGeometry() {
+  const ctx = main;
+  setFont(ctx, 800, 300);
+  G.capRatio = ctx.measureText('H').actualBoundingBoxAscent / 300;
+
+  // — title (frame 0) —
+  G.tSize = 250; G.tWeight = 800; G.tTrack = -0.035;
+  G.tGeom = wordGeom(ctx, TITLE, G.tWeight, G.tSize, G.tTrack);
+  setFont(ctx, G.tWeight, G.tSize);
+  const pm = ctx.measureText('.');
+  const pOrigin = ctx.measureText(TITLE + '.').width - pm.width + G.tTrack * G.tSize * TITLE.length;
+  const sLeft = ctx.measureText('S').actualBoundingBoxLeft;   // optical left edge
+  G.tCap = G.capRatio * G.tSize;
+  const blockL = -sLeft, blockR = pOrigin + pm.actualBoundingBoxRight;
+  G.tX0 = Math.round(CX - (blockL + blockR) / 2);
+  G.tBase = Math.round(CY + G.tCap / 2 - 18);
+  G.tExtent = G.tGeom.extent;
+  const pb = inkBox('.', G.tWeight, G.tSize);
+  G.Pr = [G.tX0 + pOrigin + pb.left, G.tBase + pb.top, G.tX0 + pOrigin + pb.right, G.tBase + pb.bottom];
+  G.Pc = [(G.Pr[0] + G.Pr[2]) / 2, (G.Pr[1] + G.Pr[3]) / 2];
+  G.sSize = 26; G.sWeight = 500;
+  G.sGeom = wordGeom(ctx, SUBTITLE, G.sWeight, G.sSize, 0.32);
+  setFont(ctx, G.sWeight, G.sSize);
+  G.sX0 = G.tX0 - sLeft + ctx.measureText('M').actualBoundingBoxLeft;
+  G.sBase = G.tBase + 86;
+  G.titleProbe = [[G.tX0, G.tBase], [G.tX0 + G.tExtent, G.tBase - G.tCap], [G.Pr[0], G.Pr[1]], [G.Pr[2], G.Pr[3]], [G.sX0, G.sBase]];
+
+  // title scanlines (targets for the hologram's spans)
+  G.spanPitch = 6;
+  const mc = document.createElement('canvas'); mc.width = W; mc.height = H;
+  const m = mc.getContext('2d', { willReadFrequently: true });
+  setFont(m, G.tWeight, G.tSize); m.fillStyle = '#fff';
+  for (let i = 0; i < TITLE.length; i++) m.fillText(TITLE[i], G.tX0 + G.tGeom.xs[i], G.tBase);
+  const img = m.getImageData(0, 0, W, H).data;
+  const dst = [];
+  const yTop = G.tBase - G.tCap - 8, yBot = G.tBase + 8;
+  const orRow = new Uint8Array(W + 1);
+  for (let y = yTop + G.spanPitch / 2; y < yBot; y += G.spanPitch) {
+    const row = Math.round(y);
+    orRow.fill(0);
+    for (let r = row - G.spanPitch / 2; r < row + G.spanPitch / 2; r++)
+      for (let x = 0; x < W; x++) if (img[(r * W + x) * 4 + 3] >= 128) orRow[x] = 1;
+    let inside = false, x0 = 0;
+    for (let x = 0; x <= W; x++) {
+      const a = orRow[x];
+      if (!inside && a) { inside = true; x0 = x; }
+      else if (inside && !a) { inside = false; dst.push({ y: row + 0.5, x0, x1: x }); }
+    }
+  }
+  const minX = Math.min(...dst.map(d => d.x0)), maxX = Math.max(...dst.map(d => d.x1));
+  dst.forEach(d => { d.delay = 0.08 * ((d.x0 + d.x1) / 2 - minX) / (maxX - minX); });
+  G.dstSpans = dst;
+
+  // — sketch: plate label + medium caption —
+  const mkCap = (text, size, w, track, base, color) => {
+    const geom = wordGeom(ctx, text, w, size, track);
+    return { text, size, w, track, base, color, geom, x0: -geom.extent / 2 };
+  };
+  G.capTop = mkCap('ICOSAHEDRON — AFTER LEONARDO DA VINCI, 1509', 20, 500, 0.24, -428, COL.sepia);
+  G.capBot = mkCap('INK ON PAPER', 24, 500, 0.2, 438, COL.sepia);
+  const inkExt = G.capBot.geom.xs[2] + G.capBot.geom.ws[2];
+  const capH24 = G.capRatio * 24;
+  G.qInk = [G.capBot.x0 + inkExt / 2, G.capBot.base - capH24 / 2];
+  // edge drawing order: ink flows down from the top vertex (breadth-first levels)
+  {
+    const top = ICO.V.map((v, i) => [MV(MM(RX(13 * DEG), RX(-31.7175 * DEG)), v)[1], i]).sort((a, b) => b[0] - a[0])[0][1];
+    G.topV = top;
+    const lvl = new Array(12).fill(99); lvl[top] = 0;
+    for (let pass = 0; pass < 4; pass++) for (const [i, j] of ICO.E) { lvl[j] = Math.min(lvl[j], lvl[i] + 1); lvl[i] = Math.min(lvl[i], lvl[j] + 1); }
+    G.vLevel = lvl;
+    G.eLevel = ICO.E.map(([i, j]) => Math.min(lvl[i], lvl[j]) + (lvl[i] === lvl[j] ? 0.5 : 0));
+    G.edgeDir = ICO.E.map(([i, j]) => lvl[i] <= lvl[j] ? [i, j] : [j, i]);
+  }
+
+  // — kinetic type —
+  G.kSize = 24 * 17; G.kCap = G.capRatio * G.kSize;
+  const lg = wordGeom(ctx, 'LIGHT', 900, G.kSize, -0.01);
+  G.lightX = lg.xs.map(x => x - lg.extent / 2);
+  const ib = inkBox('I', 900, G.kSize);
+  const iL = G.lightX[1] + ib.left, iR = G.lightX[1] + ib.right;
+  const iT = G.kCap / 2 + ib.top, iB = G.kCap / 2 + ib.bottom;      // baseline sits at kCap/2
+  G.iRect = [iL, iT, iR, iB];
+  G.iCenter = [(iL + iR) / 2, (iT + iB) / 2];
+
+  // — shapes for the morph (morph world = screen px at t = 4.0, centred) —
+  const r4 = cam(4.0) / 17;
+  const ihw = (iR - iL) / 2 * r4, ihh = (iB - iT) / 2 * r4;
+  const scale6 = cam(4.0) / cam(6.0);
+  G.goldHalf = [F0 / D0 * PHI * scale6, F0 / D0 * scale6];
+  G.circleR = 200;
+  G.triV = ngon(3, 250); G.pentV = ngon(5, 236);
+  G.shapes = [
+    polyRays([[-ihw, -ihh], [ihw, -ihh], [ihw, ihh], [-ihw, ihh]]),
+    new Float64Array(NRAY).fill(G.circleR),
+    polyRays(G.triV),
+    polyRays(G.pentV),
+    polyRays([[-G.goldHalf[0], -G.goldHalf[1]], [G.goldHalf[0], -G.goldHalf[1]], [G.goldHalf[0], G.goldHalf[1]], [-G.goldHalf[0], G.goldHalf[1]]]),
+  ];
+
+  // — object orders —
+  G.vOrder = (() => { const P = ICO.V.map((v, i) => [Math.atan2(v[1], v[0] + 0.001 * i), i]).sort((a, b) => a[0] - b[0]); const o = new Array(12); P.forEach(([, i], r) => o[i] = r); return o; })();
+  G.edgeOrder = ICO.E.map((e, i) => i).map(i => (i * 7) % 30);
+  G.fOrder = ICO.F.map((f, i) => (i * 7) % 20);
+
+  // — Euler's formula layout (data UI) —
+  setFont(ctx, 300, 64);
+  let x = 0;
+  {
+    const parts = [['12', 'VERTICES'], [' − ', null], ['30', 'EDGES'], [' + ', null], ['20', 'FACES'], [' = ', null], ['2', null]];
+    x = 0; G.eqPos = {}; G.eqOps = [];
+    parts.forEach(([s, key], i) => {
+      if (key) G.eqPos[key] = x;
+      else G.eqOps.push([s.trim() === '2' ? '2' : s.trim(), x + (s.length > 1 ? ctx.measureText(' ').width : 0), i * 0.03, s === '2' ? COL.verm : COL.paper]);
+      x += ctx.measureText(s).width;
+    });
+  }
+  // scan line: the equation collapses into one horizontal line that sweeps the object (B21)
+  G.eqMidY = 250 - G.capRatio * 64 / 2;
+  G.eqX0 = -690; G.eqX1 = -690 + x;
+
+  // hologram snapshot at t = 13.0 -> sources for the title spans
+  {
+    const st = objState(13.0);
+    const src = holoSpans(st, 13.0).spans;
+    src.sort((a, b) => a.y - b.y || a.x0 - b.x0);
+    const dsts = dst.slice().sort((a, b) => a.y - b.y || a.x0 - b.x0);
+    G.dstSpans = dsts;
+    G.srcSpans = src;
+    const n = Math.max(src.length, dsts.length), pairs = [];
+    for (let k = 0; k < n; k++) pairs.push([Math.floor(k * src.length / n), Math.floor(k * dsts.length / n)]);
+    G.spanPairs = pairs;
+  }
+}
+
+// ═════════════════════════════ boot ═════════════════════════════
+window.READY = (async () => {
+  const face = new FontFace('Geist', `url(${FONT_URL})`, { weight: '100 900' });
+  await face.load(); document.fonts.add(face);
+  await document.fonts.ready;
+  initGeometry();
+  window.seek(0, false);
+  return { srcSpans: G.srcSpans.length, dstSpans: G.dstSpans.length, edges: ICO.E.length, faces: ICO.F.length };
+})();
+</script>
+<script>
+// ═════════════════════════════ SOUNDTRACK (Web Audio, OfflineAudioContext -> WAV) ═════════════════════════════
+window.renderAudio = async function () {
+  const SR = 48000, LOOP = 15, LEN = 30.25;
+  const ac = new OfflineAudioContext(2, Math.round(SR * LEN), SR);
+  let seed = 1509;
+  const rnd = () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const noise = (() => { const b = ac.createBuffer(2, SR * 6, SR); for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = rnd() * 2 - 1; } return b; })();
+  const ir = (() => { const len = SR * 2.2, b = ac.createBuffer(2, len, SR); for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (rnd() * 2 - 1) * Math.pow(1 - i / len, 3.2) * Math.exp(-i / (SR * 0.55)); } return b; })();
+
+  const comp = ac.createDynamicsCompressor();
+  comp.threshold.value = -14; comp.knee.value = 8; comp.ratio.value = 4; comp.attack.value = 0.003; comp.release.value = 0.16;
+  const master = ac.createGain(); master.gain.value = 0.8;
+  master.connect(comp); comp.connect(ac.destination);
+  const verb = ac.createConvolver(); verb.buffer = ir;
+  const verbRet = ac.createGain(); verbRet.gain.value = 0.32; verb.connect(verbRet); verbRet.connect(master);
+  const send = (node, amt) => { const g = ac.createGain(); g.gain.value = amt; node.connect(g); g.connect(verb); };
+  const sat = (() => { const ws = ac.createWaveShaper(); const c = new Float32Array(1024); for (let i = 0; i < 1024; i++) { const x = i / 511.5 - 1; c[i] = Math.tanh(2.2 * x) / Math.tanh(2.2); } ws.curve = c; return ws; })();
+  const kickBus = ac.createGain(); kickBus.gain.value = 1; kickBus.connect(sat); sat.connect(master);
+  const pan = (node, p) => { const pn = ac.createStereoPanner(); pn.pan.value = p; node.connect(pn); return pn; };
+
+  const env = (g, t, a, peak, d, end = 0.0008) => { g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(end, t + a + d); };
+  const noiseSrc = (t, dur, off = 0) => { const s = ac.createBufferSource(); s.buffer = noise; s.start(t, off % 3, dur); return s; };
+  const osc = (type, f, t, dur) => { const o = ac.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t); o.start(t); o.stop(t + dur); return o; };
+
+  function kick(t, v = 1) {
+    const o = osc('sine', 165, t, 0.5);
+    o.frequency.exponentialRampToValueAtTime(58, t + 0.07); o.frequency.exponentialRampToValueAtTime(44, t + 0.32);
+    const g = ac.createGain(); env(g, t, 0.0015, 0.95 * v, 0.42); o.connect(g); g.connect(kickBus);
+    const n = noiseSrc(t, 0.02, t * 1.7); const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2600;
+    const gn = ac.createGain(); env(gn, t, 0.0005, 0.22 * v, 0.014); n.connect(hp); hp.connect(gn); gn.connect(kickBus);
+  }
+  function hat(t, v = 0.12, len = 0.035, p = 0.25) {
+    const n = noiseSrc(t, len + 0.02, t * 3.1); const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 7800;
+    const g = ac.createGain(); env(g, t, 0.0008, v, len); n.connect(hp); hp.connect(g); pan(g, p).connect(master);
+  }
+  function bass(t, f, dur = 0.22, v = 0.32) {
+    const o = osc('sine', f, t, dur + 0.1), o2 = osc('triangle', f * 2, t, dur + 0.1);
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(900, t); lp.frequency.exponentialRampToValueAtTime(220, t + dur);
+    const g = ac.createGain(); env(g, t, 0.006, v, dur); const g2 = ac.createGain(); g2.gain.value = 0.18;
+    o.connect(g); o2.connect(g2); g2.connect(lp); lp.connect(g); g.connect(master);
+  }
+  function hit(t, chord, big = 1) {
+    // sub boom
+    const o = osc('sine', 72, t, 1.4); o.frequency.exponentialRampToValueAtTime(36, t + 0.9);
+    const g = ac.createGain(); env(g, t, 0.003, 0.7 * big, 1.1); o.connect(g); g.connect(master);
+    // crack
+    const n = noiseSrc(t, 0.4, t * 2.3); const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1700; bp.Q.value = 0.7;
+    const gn = ac.createGain(); env(gn, t, 0.001, 0.42 * big, 0.2); n.connect(bp); bp.connect(gn); gn.connect(master); send(gn, 0.6);
+    // tonal stab
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 2; lp.frequency.setValueAtTime(5200, t); lp.frequency.exponentialRampToValueAtTime(380, t + 0.7);
+    const gs = ac.createGain(); env(gs, t, 0.004, 0.085 * big, 0.9);
+    chord.forEach((f, i) => [-7, 7].forEach(dt => { const s = osc('sawtooth', f, t, 1.2); s.detune.value = dt; s.connect(lp); }));
+    lp.connect(gs); gs.connect(master); send(gs, 0.7);
+  }
+  function scratch(t0, dur, v = 0.08) {   // pen on paper
+    const n = noiseSrc(t0, dur + 0.05, t0 * 5.3); const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 3400; bp.Q.value = 1.1;
+    const g = ac.createGain(); g.gain.setValueAtTime(0, t0);
+    for (let x = t0; x < t0 + dur; x += 0.018 + rnd() * 0.02) { g.gain.linearRampToValueAtTime(v * (0.3 + rnd() * 0.7), x + 0.006); g.gain.linearRampToValueAtTime(v * 0.1, x + 0.016); }
+    g.gain.linearRampToValueAtTime(0, t0 + dur + 0.02);
+    n.connect(bp); bp.connect(g); pan(g, (rnd() - 0.5) * 0.6).connect(master); send(g, 0.2);
+  }
+  function tick(t, f = 2400, v = 0.06, len = 0.018, p = 0) {
+    const o = osc('sine', f, t, len + 0.03); const g = ac.createGain(); env(g, t, 0.0006, v, len); o.connect(g); pan(g, p).connect(master);
+  }
+  function whoosh(t0, dur, f0, f1, v = 0.18, p = 0) {
+    const n = noiseSrc(t0, dur + 0.05, t0 * 7.7); const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.4;
+    bp.frequency.setValueAtTime(f0, t0); bp.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+    const g = ac.createGain(); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(v, t0 + dur * 0.65); g.gain.linearRampToValueAtTime(0, t0 + dur);
+    n.connect(bp); bp.connect(g); pan(g, p).connect(master); send(g, 0.25);
+  }
+  function clack(t, f = 900, v = 0.2) {
+    const n = noiseSrc(t, 0.06, t * 9.1); const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = 5;
+    const g = ac.createGain(); env(g, t, 0.0005, v, 0.05); n.connect(bp); bp.connect(g); g.connect(master); send(g, 0.3);
+    tick(t, f / 4, v * 0.5, 0.03);
+  }
+  function shimmer(t0, dur, f, v = 0.03) {
+    const c = osc('sine', f, t0, dur + 0.1), m = osc('sine', f * 1.5, t0, dur + 0.1);
+    const mg = ac.createGain(); mg.gain.setValueAtTime(f * 0.2, t0); mg.gain.linearRampToValueAtTime(f * 1.2, t0 + dur); m.connect(mg); mg.connect(c.frequency);
+    const g = ac.createGain(); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(v, t0 + dur * 0.8); g.gain.linearRampToValueAtTime(0, t0 + dur);
+    c.connect(g); g.connect(master); send(g, 0.5);
+  }
+
+  const hz = n => 440 * Math.pow(2, (n - 69) / 12);
+  // progression per bar (bar 8 is the half bar); bass roots and stab voicings
+  const BARS = [
+    { root: 38, chord: [62, 65, 69, 74] },   // Dm
+    { root: 34, chord: [58, 62, 65, 70] },   // Bb
+    { root: 41, chord: [60, 65, 69, 72] },   // F
+    { root: 36, chord: [60, 64, 67, 72] },   // C
+    { root: 38, chord: [62, 65, 69, 76] },   // Dm(add9 on top)
+    { root: 34, chord: [58, 62, 65, 72] },   // Bb(add9)
+    { root: 38, chord: [50, 62, 65, 69, 74] }, // Dm, wide
+    { root: 38, chord: [62, 65, 69, 74] },   // Dm
+  ];
+  // the score, as a function of its start offset O (it is played twice; the second pass is the loop)
+  function score(O) {
+    const T = x => O + x;
+    // kick on every beat, offbeat bass, hats
+    for (let b = 0; b < 30; b++) {
+      const t = b * 0.5, bar = BARS[Math.floor(b / 4)];
+      kick(T(t), b % 4 === 0 ? 1 : 0.86);
+      if (!(t >= 11.5 && t < 12.0)) bass(T(t + 0.25), hz(bar.root), 0.2, 0.3);
+      hat(T(t + 0.25), 0.1, 0.05, 0.2);
+      if (t >= 4 && t < 12) { hat(T(t + 0.125), 0.035, 0.02, -0.3); hat(T(t + 0.375), 0.035, 0.02, -0.3); }
+    }
+    // hits on every scene change (bar lines) + the title assembly
+    [[0, 0], [2, 1], [4, 2], [6, 3], [8, 4], [10, 5]].forEach(([t, i]) => hit(T(t), BARS[i].chord.map(hz), 0.75));
+    hit(T(12), BARS[6].chord.map(hz), 1.5);
+    hit(T(13), BARS[6].chord.map(n => hz(n + 12)), 0.7);
+    // riser into the last full bar (B21-B24)
+    {
+      const t0 = T(10.0), t1 = T(12.0);
+      const n = noiseSrc(t0, t1 - t0, 1.3); const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2.2;
+      bp.frequency.setValueAtTime(300, t0); bp.frequency.exponentialRampToValueAtTime(9000, t1);
+      const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.6, t1 - 0.02); g.gain.linearRampToValueAtTime(0, t1);
+      n.connect(bp); bp.connect(g); g.connect(master); send(g, 0.3);
+      const s = osc('sawtooth', 110, t0, t1 - t0); s.frequency.exponentialRampToValueAtTime(880, t1);
+      const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(400, t0); lp.frequency.exponentialRampToValueAtTime(6000, t1);
+      const gs = ac.createGain(); gs.gain.setValueAtTime(0.0001, t0); gs.gain.exponentialRampToValueAtTime(0.13, t1 - 0.02); gs.gain.linearRampToValueAtTime(0, t1);
+      s.connect(lp); lp.connect(gs); gs.connect(master);
+      // snare roll accelerating: quarters -> eighths -> sixteenths -> 32nds
+      const roll = [];
+      for (let x = 10.0; x < 11.0; x += 0.25) roll.push(x);
+      for (let x = 11.0; x < 11.5; x += 0.125) roll.push(x);
+      for (let x = 11.5; x < 11.75; x += 0.0625) roll.push(x);
+      for (let x = 11.75; x < 11.98; x += 0.03125) roll.push(x);
+      roll.forEach(x => {
+        const v = 0.08 + 0.34 * ((x - 10) / 2) ** 2;
+        const nn = noiseSrc(T(x), 0.12, x * 4.4); const bp2 = ac.createBiquadFilter(); bp2.type = 'bandpass'; bp2.frequency.value = 1800 + 1400 * (x - 10) / 2; bp2.Q.value = 0.9;
+        const gg = ac.createGain(); env(gg, T(x), 0.001, v, 0.08); nn.connect(bp2); bp2.connect(gg); gg.connect(master); send(gg, 0.25);
+      });
+      shimmer(T(10.0), 2.0, hz(86), 0.025);
+    }
+    // scene foley, one gesture per beat
+    scratch(T(0.24), 0.3, 0.05); scratch(T(0.5), 0.45, 0.09); scratch(T(1.0), 0.45, 0.1); whoosh(T(1.5), 0.5, 400, 4000, 0.16);      // bar 1
+    tick(T(2.5), 3200, 0.07); tick(T(2.52), 2400, 0.05); tick(T(3.0), 3600, 0.07); tick(T(3.03), 2700, 0.05);                       // bar 2
+    whoosh(T(3.5), 0.48, 600, 5200, 0.14, 0.4);
+    [4.0, 4.5, 5.0, 5.5].forEach((t, i) => whoosh(T(t), 0.3, 2400, 500, 0.12, i % 2 ? 0.4 : -0.4));                                 // bar 3
+    whoosh(T(5.72), 0.28, 200, 2400, 0.14);
+    clack(T(6.0), 700); clack(T(6.5), 900, 0.18); clack(T(7.0), 1100, 0.18);                                                       // bar 4
+    for (let i = 0; i < 30; i++) tick(T(7.5 + i * 0.0085), 1800 + i * 60, 0.03, 0.01, (i % 2 ? 0.5 : -0.5));
+    for (let i = 0; i < 12; i++) tick(T(8.02 + i * 0.026), 2200, 0.04, 0.012, -0.3);                                                 // bar 5
+    for (let i = 0; i < 30; i++) tick(T(8.52 + i * 0.0095), 2700, 0.03, 0.01, -0.3);
+    for (let i = 0; i < 20; i++) tick(T(9.02 + i * 0.014), 3200, 0.03, 0.01, -0.3);
+    tick(T(9.5), 1760, 0.07, 0.08); tick(T(9.62), 2637, 0.06, 0.12);
+    whoosh(T(10.0), 0.45, 800, 3600, 0.1); clack(T(10.5), 500, 0.16); whoosh(T(11.0), 0.3, 1200, 300, 0.16, -0.3);                 // bar 6
+    whoosh(T(12.4), 0.62, 300, 7000, 0.26);                                                                                          // bar 7 rush
+    shimmer(T(13.5), 0.4, hz(81), 0.03);
+    for (let i = 0; i < 12; i++) tick(T(14.0 + i * 0.011), 3000 + i * 40, 0.02, 0.01, 0.3);                                         // half bar
+    tick(T(14.5), 1320, 0.08, 0.05); clack(T(14.5), 1300, 0.08);
+    whoosh(T(14.4), 0.6, 300, 6000, 0.12);   // pre-roll of the opening push (crosses the loop point)
+  }
+  score(0); score(LOOP);
+
+  const buf = await ac.startRendering();
+  const CH = [buf.getChannelData(0), buf.getChannelData(1)];
+  // keep the second pass: tails, reverb and compressor are in their true looping state.
+  // measure the compressor look-ahead latency on the second pass's beat-2 kick and compensate it.
+  const N = SR * LOOP;
+  let ref = 0; for (let i = Math.round(15.48 * SR); i < Math.round(15.56 * SR); i++) ref = Math.max(ref, Math.abs(CH[0][i]));
+  let onset = Math.round(15.5 * SR);
+  for (let i = Math.round(15.49 * SR); i < Math.round(15.56 * SR); i++) if (Math.abs(CH[0][i]) > ref * 0.1) { onset = i; break; }
+  const latency = onset - Math.round(15.5 * SR);
+  const start = N + Math.max(0, latency);
+  const L = CH[0].subarray(start, start + N), R = CH[1].subarray(start, start + N);
+  let peak = 0; for (let i = 0; i < N; i++) peak = Math.max(peak, Math.abs(L[i]), Math.abs(R[i]));
+  const gain = Math.pow(10, -1 / 20) / (peak || 1);
+  // 16-bit PCM WAV
+  const bytes = new Uint8Array(44 + N * 4), dv = new DataView(bytes.buffer);
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) bytes[o + i] = s.charCodeAt(i); };
+  str(0, 'RIFF'); dv.setUint32(4, 36 + N * 4, true); str(8, 'WAVE'); str(12, 'fmt '); dv.setUint32(16, 16, true);
+  dv.setUint16(20, 1, true); dv.setUint16(22, 2, true); dv.setUint32(24, SR, true); dv.setUint32(28, SR * 4, true); dv.setUint16(32, 4, true); dv.setUint16(34, 16, true);
+  str(36, 'data'); dv.setUint32(40, N * 4, true);
+  for (let i = 0, o = 44; i < N; i++, o += 4) {
+    dv.setInt16(o, Math.max(-32768, Math.min(32767, Math.round(L[i] * gain * 32767))), true);
+    dv.setInt16(o + 2, Math.max(-32768, Math.min(32767, Math.round(R[i] * gain * 32767))), true);
+  }
+  let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return { wav: btoa(bin), peak, gain, latencyMs: latency / SR * 1000 };
+};
+</script>
+</body>
+</html>
