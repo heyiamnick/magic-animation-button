@@ -1,0 +1,6 @@
+node_modules/
+# source maps (~1.1 GB) and music: re-download with tools/fetch_sources.sh
+maps/src/
+music/*.m4a
+# frames, pieces and other render output
+out/

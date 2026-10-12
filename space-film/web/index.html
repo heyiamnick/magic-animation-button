@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Next 30 Years in Space</title>
+<style>
+  @font-face { font-family: 'Alegreya Sans'; font-weight: 300; src: url('../node_modules/@fontsource/alegreya-sans/files/alegreya-sans-latin-300-normal.woff2') format('woff2'); }
+  @font-face { font-family: 'Alegreya Sans SC'; font-weight: 400; src: url('../node_modules/@fontsource/alegreya-sans-sc/files/alegreya-sans-sc-latin-400-normal.woff2') format('woff2'); }
+  html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+  #stage { position: relative; width: 100vw; height: 100vh; }
+  #c { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  /* Bottom left, inside the title-safe area (10% in from each edge). */
+  #caption { position: absolute; left: 10vw; bottom: 11vh; color: #eef3f8;
+    text-shadow: 0 0 1.6vh rgba(0, 0, 0, 0.85), 0 0 0.5vh rgba(0, 0, 0, 0.9); }
+  #year { font-family: 'Alegreya Sans', sans-serif; font-weight: 300; font-size: 16.5vh; line-height: 0.9;
+    font-variant-numeric: lining-nums tabular-nums; letter-spacing: 0.01em; }
+  /* Alegreya Sans SC draws lower-case letters as true small capitals. */
+  #line { font-family: 'Alegreya Sans SC', sans-serif; font-weight: 400; font-size: 6.2vh; line-height: 1.1;
+    letter-spacing: 0.06em; margin-top: 1.6vh; font-variant-numeric: lining-nums; white-space: nowrap; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "../node_modules/three/build/three.module.js",
+  "three/addons/": "../node_modules/three/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="stage">
+  <canvas id="c"></canvas>
+  <div id="caption"><div id="year">2026</div><div id="line"></div></div>
+</div>
+<script type="module" src="film/main.js"></script>
+</body>
+</html>

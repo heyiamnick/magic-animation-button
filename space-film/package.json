@@ -1,0 +1,17 @@
+{
+  "name": "space-film",
+  "private": true,
+  "version": "1.0.0",
+  "description": "A one-take film of the next 30 years in space, rendered frame by frame with three.js",
+  "type": "module",
+  "scripts": {
+    "check-path": "node tools/check_path.mjs",
+    "render": "node tools/render.mjs"
+  },
+  "dependencies": {
+    "@fontsource/alegreya-sans": "5.3.0",
+    "@fontsource/alegreya-sans-sc": "5.3.0",
+    "playwright-core": "1.56.1",
+    "three": "0.186.1"
+  }
+}
